@@ -1,0 +1,278 @@
+下面给你一套“可落库、能支撑你当前页面交互闭环（支部排序/分析 + 干部筛选/详情 + 拖拽调整 + A/B库预警 + 审计留痕）”的 **Django Models 设计**。你可以直接把这份设计丢给 Claude 让它按此生成代码。
+
+我按你创建的 apps 来写：`orgs / cadres / staffing / risk_rules / audit`（其余模块后续再扩）。
+
+---
+
+# 0. 全局约定（强烈建议）
+
+* **干部唯一键**：`cadre_code`（工号/警号/内部编号），全库唯一。
+* **组织单元统一模型**：支部、科室、部门都用 `OrgUnit`，用 `unit_type` 区分。
+* **可追溯**：所有关键业务表带 `created_at/updated_at`；调整动作单独记录。
+* **约束**：`ConflictPair` 要保证对称唯一（A-B 与 B-A 视为同一对）。
+
+---
+
+# 1) orgs app
+
+## OrgUnit（组织单元：支部/部门/岗位容器）
+
+**用途**：左上“所有支部排序列表”、左下“支部分析”、人事调整目标容器。
+
+字段：
+
+* `id` UUID
+* `name`：名称（支部名）
+* `code`：组织编码（可选但推荐唯一）
+* `unit_type`：枚举（`BRANCH` 支部 / `DEPARTMENT` 部门 / `TEAM` 等）
+* `parent`：自关联（树结构）
+* `sort_order`：人工排序（可选）
+* `is_active`：启用/停用
+* `metrics_snapshot`：JSON（可选，用于缓存支部分析指标，提升排序性能）
+* `created_at / updated_at`
+
+索引/约束：
+
+* `Unique(code)`（如有）
+* `Index(unit_type, is_active)`
+
+---
+
+# 2) cadres app
+
+## Cadre（干部主档）
+
+**用途**：右上筛选、右中列表、右下详情、支部结构统计的“年龄/学历/履历”等基础来源。
+
+字段：
+
+* `id` UUID
+* `cadre_code`：唯一编号（必须唯一）
+* `name`
+* `gender`：枚举（M/F/U）
+* `birth_date`（用于计算年龄）
+* `native_place`（籍贯，可选）
+* `ethnicity`（民族，可选）
+* `political_status`（政治面貌，可选/枚举）
+* `education_level`（学历层次：中专/大专/本科/硕士/博士…枚举）
+* `degree`（学位，可选）
+* `join_work_date`（参加工作/入监狱系统时间）
+* `hire_date`（入职/入监狱时间可选）
+* `current_position`（现任职务名称，字符串 or 外键字典）
+* `current_rank`（现任职级名称）
+* `position_start_date`（任现职时间）
+* `status`：枚举（在职/调离/退休/离职等）
+* `tags`：JSON（可选：用于快速标记“中层领导类别”等）
+* `created_at / updated_at`
+
+索引/约束：
+
+* `Unique(cadre_code)`
+* `Index(name)`（支持检索）
+* `Index(status, education_level)`
+* `Index(position_start_date)`
+
+## CadreResume（履历）
+
+**用途**：你要做“履历比例/任职经历结构分析”就需要。
+
+字段：
+
+* `id` UUID
+* `cadre` FK -> Cadre
+* `org_unit` FK -> OrgUnit（在哪个单位）
+* `position_title`（岗位/职务）
+* `start_date`
+* `end_date`（可空表示至今）
+* `remark`
+* `created_at`
+
+索引：
+
+* `Index(cadre, start_date desc)`
+
+---
+
+# 3) staffing app（拖拽调整/草案/生效）
+
+## OrgMembership（干部当前归属/任职到支部）
+
+**用途**：系统“当前状态”的单一真相来源；左下支部统计“支部有哪些人”。
+
+字段：
+
+* `id` UUID
+* `cadre` FK -> Cadre
+* `org_unit` FK -> OrgUnit（支部）
+* `role_in_unit`：枚举（书记/委员/成员/负责人…可选）
+* `is_primary`：是否主归属（默认 True）
+* `start_date`（生效）
+* `end_date`（可空）
+* `status`：枚举（ACTIVE/INACTIVE）
+* `created_at / updated_at`
+
+关键约束（推荐）：
+
+* 同一干部同一时间只有一个 `ACTIVE & is_primary=True` 的归属
+
+  * 代码层校验 or DB 约束（Postgres 可用 Partial Unique Index）
+
+索引：
+
+* `Index(org_unit, status)`
+* `Index(cadre, status)`
+* `Index(org_unit, is_primary, status)`
+
+## StaffingPlan（人事调整方案/草案）
+
+**用途**：你拖拽不是立刻生效，而是形成一份“调整方案草案”，可提交、可撤回、可审计。
+
+字段：
+
+* `id` UUID
+* `title`（如：2025Q4支部优化草案）
+* `description`
+* `status`：枚举（DRAFT / SUBMITTED / APPROVED / APPLIED / REJECTED / CANCELED）
+* `created_by` FK -> User（accounts）
+* `approved_by` FK -> User（可空）
+* `approved_at`（可空）
+* `applied_at`（可空，真正写入 OrgMembership 的时间）
+* `created_at / updated_at`
+
+索引：
+
+* `Index(status, created_at desc)`
+
+## StaffingPlanMove（拖拽动作明细）
+
+**用途**：每一次拖动都记录“从哪里到哪里”，并可触发预警校验。
+
+字段：
+
+* `id` UUID
+* `plan` FK -> StaffingPlan
+* `cadre` FK -> Cadre
+* `from_unit` FK -> OrgUnit（可空：无归属 -> 调入）
+* `to_unit` FK -> OrgUnit（可空：调出到空）
+* `move_type`：枚举（ASSIGN / REMOVE / TRANSFER）
+* `reason`（可空）
+* `risk_snapshot`：JSON（当次校验结果快照：A库冲突、B库数量变化等）
+* `created_by` FK -> User
+* `created_at`
+
+索引：
+
+* `Index(plan, created_at)`
+* `Index(to_unit, created_at)`
+* `Index(cadre, plan)`
+
+> 生效逻辑建议：`APPLY` 时根据 plan 计算最终归属，批量更新 OrgMembership（关闭旧的 end_date，新增新的 active 记录）。
+
+---
+
+# 4) risk_rules app（A/B库）
+
+## RiskPersonTag（B库：重点敏感人员库）
+
+**用途**：支部分析展示“B库人数”；筛选条件；右侧人员列表标记。
+
+字段：
+
+* `id` UUID
+* `cadre` OneToOne or FK（一般 OneToOne 更合适）
+* `tag_type`：枚举（B_KEY_PERSON / RELATIONSHIP_BAD / SENSITIVE / OTHER）
+* `risk_level`：枚举（LOW/MEDIUM/HIGH）
+* `reason`（可空）
+* `is_active`
+* `created_by` FK -> User（可空）
+* `created_at / updated_at`
+
+索引：
+
+* `Index(tag_type, is_active)`
+* `Index(risk_level, is_active)`
+
+## ConflictPair（A库：矛盾关系对照表）
+
+**用途**：当把矛盾对放入同一支部时标红提醒。
+
+字段：
+
+* `id` UUID
+* `cadre_a` FK -> Cadre
+* `cadre_b` FK -> Cadre
+* `conflict_type`：枚举（WORK_CONFLICT / PERSONAL_CONFLICT / OTHER）
+* `severity`：枚举（LOW/MEDIUM/HIGH）
+* `note`（可空）
+* `is_active`
+* `created_by` FK -> User（可空）
+* `created_at / updated_at`
+
+关键约束（必须）：
+
+* `cadre_a != cadre_b`
+* 对称唯一：同一对只允许一条（A-B 或 B-A 视为重复）
+
+  * 实现方式：保存前强制排序（按 UUID/代码大小），写入到 a/b；再 `Unique(cadre_a, cadre_b)`。
+
+索引：
+
+* `Index(cadre_a, is_active)`
+* `Index(cadre_b, is_active)`
+* `Index(severity, is_active)`
+
+---
+
+# 5) audit app（留痕审计）
+
+## AuditLog
+
+**用途**：任何关键动作留痕，满足“可追溯”。
+
+字段：
+
+* `id` UUID
+* `actor` FK -> User
+* `action`：枚举（CREATE_PLAN / ADD_MOVE / VALIDATE_PLAN / APPLY_PLAN / UPDATE_CADRE / IMPORT_DATA …）
+* `target_type`：字符串（如 "Cadre"/"StaffingPlan"/"OrgUnit"）
+* `target_id` UUID（可空）
+* `context` JSON（记录旧值/新值/预警结果/客户端信息）
+* `ip_address`（可空）
+* `created_at`
+
+索引：
+
+* `Index(action, created_at desc)`
+* `Index(target_type, target_id)`
+
+---
+
+# 6) 你页面要的“支部分析指标”怎么从表算出来（给 Claude 的口径）
+
+支部分析（左下）最少要能算：
+
+* 年龄分布：按 `Cadre.birth_date` 计算年龄分桶（<30/30-40/40-50/50+）
+* 学历分布：`Cadre.education_level` group by
+* 履历结构：基于 `CadreResume`（可选）统计“在某类单位/岗位经历占比”
+* B库人数：`RiskPersonTag(is_active=True)` 且该支部成员包含的数量
+* A库冲突检测：对支部成员集合 S，若存在任何 `ConflictPair(a,b)` 且 a,b 都在 S，则返回冲突列表（用于标红/提醒）
+
+拖拽校验：
+
+* 对 plan 的“当前支部成员集合 + plan moves 的模拟结果”做一次冲突检测
+* 若将冲突对放入同一 `to_unit`，返回 `{"unit_id":..., "cadre_a":..., "cadre_b":..., "severity":...}` 并在前端标红
+
+---
+
+# 7) Claude 输出代码时的额外要求（你可直接复制给它）
+
+1. 所有主表使用 `UUIDField(primary_key=True, default=uuid4, editable=False)`
+2. 所有外键用 `on_delete=PROTECT`（核心数据不轻易级联删）
+3. 增加 `db_index=True` 在高频过滤字段上（status、unit_type、cadre_code）
+4. `ConflictPair.save()` 内做对称排序+唯一约束
+5. `OrgMembership` 需要业务校验：同一干部只能有一个 primary active
+6. models 里加 `__str__`、`Meta`（ordering、indexes、constraints）
+
+---
+
+如果你把“花名册模板/研判表/奖励表”里具体字段（列名）再贴我一小段，我还能把 `Cadre` 的字段映射得更精确（例如：职务层级、警衔/职级、入监狱工作时间字段名），并给你一份“字段映射清单”方便导入校验。

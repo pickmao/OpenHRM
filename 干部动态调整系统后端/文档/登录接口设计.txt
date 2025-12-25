@@ -1,0 +1,209 @@
+下面给你一套符合你系统（政务/监狱场景、分级授权、审计留痕、支部/部门数据隔离、支持拖拽调整与预警）的一套 **登录与鉴权设计**。你可以把这份“设计说明”直接给 Claude 让它写 DRF 代码。
+
+---
+
+# 1. 登录与鉴权目标
+
+1. 支持 **账号密码登录**（优先），可扩展到单点登录/LDAP/内网统一身份
+2. 登录后得到 **短期 Access Token + 长期 Refresh Token**（JWT）
+3. 所有接口实现 **按角色 + 按组织范围** 的授权控制
+4. 关键操作（尤其是“人事调整/方案生效”）必须 **审计留痕**
+5. 前端要能拿到：当前用户信息、角色、可访问的组织范围、菜单权限点
+
+---
+
+# 2. 用户与权限模型（建议）
+
+## 2.1 核心表（accounts app）
+
+* `User`（继承 AbstractUser 或自定义）
+
+  * `username`（账号）
+  * `real_name`
+  * `phone`（可选）
+  * `is_active`
+  * `last_login_ip`（可选）
+* `Role`
+
+  * `code`（如 `POLITICAL_OFFICE_ADMIN`）
+  * `name`（政治处管理员）
+* `UserRole`（多对多）
+* `DataScope`（数据范围）
+
+  * `scope_type`：`ALL / ORG_UNIT / SELF`
+  * `org_units`：可访问的支部/部门集合（多对多）
+  * `note`
+
+## 2.2 角色建议（对你需求最贴合）
+
+* `SUPER_ADMIN`：系统超级管理员（全量）
+* `POLITICAL_OFFICE_ADMIN`：政治处管理员（全量干部 + 方案生效权限）
+* `DEPT_MANAGER`：部门/支部负责人（仅本部门/支部 + 只能提草案或建议）
+* `ANALYST`：研判/统计人员（只读 + 报表）
+* `CADRE_SELF`：本人账号（仅看个人档案）
+
+> 核心点：**角色决定“能做什么”**；数据范围决定“能看哪些人/哪些支部”。两者叠加。
+
+---
+
+# 3. 登录接口设计（DRF）
+
+## 3.1 登录
+
+### `POST /api/auth/login/`
+
+请求：
+
+```json
+{
+  "username": "zhangsan",
+  "password": "******",
+  "captcha": "可选",
+  "device_id": "可选"
+}
+```
+
+响应（建议）：
+
+```json
+{
+  "access": "jwt_access_token",
+  "refresh": "jwt_refresh_token",
+  "expires_in": 900,
+  "user": {
+    "id": "uuid",
+    "username": "zhangsan",
+    "real_name": "张三",
+    "roles": ["POLITICAL_OFFICE_ADMIN"],
+    "data_scope": {
+      "scope_type": "ALL",
+      "org_unit_ids": []
+    }
+  },
+  "permissions": [
+    "cadres:view",
+    "staffing:plan:create",
+    "staffing:plan:apply",
+    "risk:manage"
+  ]
+}
+```
+
+登录成功后：
+
+* 更新 `last_login`、`last_login_ip`
+* 写 `AuditLog(action=LOGIN_SUCCESS, actor=user, ip=...)`
+
+登录失败：
+
+* 返回 401/400，并写 `AuditLog(action=LOGIN_FAIL, context={username, reason})`
+
+---
+
+## 3.2 刷新 Token
+
+### `POST /api/auth/refresh/`
+
+请求：
+
+```json
+{ "refresh": "jwt_refresh_token" }
+```
+
+响应：
+
+```json
+{ "access": "new_access_token", "expires_in": 900 }
+```
+
+---
+
+## 3.3 登出
+
+### `POST /api/auth/logout/`
+
+* 如果使用 JWT 黑名单机制：把 refresh token 加入 blacklist
+* 写审计日志 `LOGOUT`
+
+---
+
+## 3.4 获取当前用户
+
+### `GET /api/auth/me/`
+
+返回：
+
+* user 基本信息
+* roles
+* data_scope
+* permissions（权限点集合）
+* 可访问组织树（可选：用于前端初始化左侧支部列表）
+
+---
+
+# 4. 权限控制策略（你系统最关键）
+
+## 4.1 权限粒度（建议用“权限点”）
+
+用字符串权限点（更灵活）：
+
+* `cadres:view` / `cadres:edit`
+* `orgs:view`
+* `analytics:view`
+* `staffing:plan:create` / `staffing:plan:submit` / `staffing:plan:apply`
+* `risk:view` / `risk:manage`
+* `audit:view`
+
+## 4.2 数据范围（DataScope）如何落地
+
+后端每个 QuerySet 必须过一层过滤器：
+
+* `scope_type = ALL`：不加过滤
+* `scope_type = ORG_UNIT`：只返回 `OrgMembership.org_unit in allowed_org_units` 的干部
+* `scope_type = SELF`：只返回本人 `Cadre` 记录（或绑定关系）
+
+绑定关系建议：
+
+* `User.profile_cadre`（OneToOne 到 Cadre，可为空；干部本人账号用这个）
+
+**示例：干部列表接口过滤逻辑（伪代码）**
+
+* 如果 ALL：`Cadre.objects.all()`
+* 如果 ORG_UNIT：`Cadre.objects.filter(memberships__org_unit__in=allowed_units, memberships__status='ACTIVE')`
+* 如果 SELF：`Cadre.objects.filter(id=user.profile_cadre_id)`
+
+---
+
+# 5. 高风险操作的登录态要求（符合你的“人事调整”场景）
+
+对以下动作建议增加二次校验（可先不做，留扩展）：
+
+* `staffing:plan:apply`（方案生效）
+* `risk:manage`（新增/修改 A/B 库）
+  方式：
+* 要求最近 N 分钟内重新输入密码 / 或短信口令（内网可简化）
+
+---
+
+# 6. 安全建议（建议你先定规则，后续逐步实现）
+
+* Access token 15 分钟，Refresh token 7~30 天
+* 限制登录失败次数（比如 5 次锁定 10 分钟）
+* 强制 HTTPS（内网也建议）
+* 密码加密：Django 默认 PBKDF2
+* 全量审计：登录、登出、导入、拖拽 move、方案 apply、A/B库变更
+
+---
+
+# 7. Claude 写代码时你给它的明确指令（复制给 Claude）
+
+1. 使用 **DRF + simplejwt** 实现 login/refresh/logout/me
+2. login 返回 user、roles、data_scope、permissions
+3. 权限采用自定义 Permission Class（支持 `permission_code`）
+4. 数据范围用 QuerySet 过滤工具函数（例如 `apply_data_scope(user, queryset)`）
+5. 每次登录成功/失败都写 `AuditLog`
+6. 支持后续扩展到 LDAP/单点登录（先留接口结构即可）
+
+---
+
+如果你愿意，我可以再给你一份“最小可用实现清单”（settings 配置、URL 路由、serializers、views、permission class、data scope 过滤器的文件结构），你交给 Claude 它能一次性生成可运行代码。
