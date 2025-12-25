@@ -7,6 +7,8 @@ from rest_framework.views import APIView
 from rest_framework.generics import RetrieveAPIView
 from django.contrib.auth import login
 from django.utils import timezone
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from .models import DataScope
 from .serializers import (
     LoginSerializer,
@@ -16,6 +18,98 @@ from .serializers import (
     ChangePasswordSerializer
 )
 from audit.models import AuditLog, AuditAction
+
+# 登录接口的请求和响应schema
+login_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    required=['username', 'password'],
+    properties={
+        'username': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='用户名',
+            example='admin'
+        ),
+        'password': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='密码',
+            example='admin123456'
+        ),
+    }
+)
+
+login_response_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        'access': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='访问令牌（Access Token），有效期15分钟'
+        ),
+        'refresh': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='刷新令牌（Refresh Token），有效期7天'
+        ),
+        'expires_in': openapi.Schema(
+            type=openapi.TYPE_INTEGER,
+            description='访问令牌过期时间（秒）'
+        ),
+        'user': openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            description='用户信息',
+            properties={
+                'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='用户ID'),
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description='用户名'),
+                'real_name': openapi.Schema(type=openapi.TYPE_STRING, description='真实姓名'),
+                'email': openapi.Schema(type=openapi.TYPE_STRING, description='邮箱'),
+                'phone': openapi.Schema(type=openapi.TYPE_STRING, description='手机号'),
+                'role': openapi.Schema(type=openapi.TYPE_STRING, description='角色'),
+            }
+        ),
+        'permissions': openapi.Schema(
+            type=openapi.TYPE_ARRAY,
+            items=openapi.Schema(type=openapi.TYPE_STRING),
+            description='用户权限列表'
+        )
+    }
+)
+
+refresh_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    required=['refresh'],
+    properties={
+        'refresh': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='刷新令牌'
+        ),
+    }
+)
+
+logout_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    required=['refresh'],
+    properties={
+        'refresh': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='刷新令牌（需要加入黑名单）'
+        ),
+    }
+)
+
+change_password_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    required=['old_password', 'new_password'],
+    properties={
+        'old_password': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='旧密码',
+            minLength=6
+        ),
+        'new_password': openapi.Schema(
+            type=openapi.TYPE_STRING,
+            description='新密码',
+            minLength=6
+        ),
+    }
+)
 
 
 def get_client_ip(request):
@@ -30,6 +124,27 @@ def get_client_ip(request):
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@swagger_auto_schema(
+    operation_summary='用户登录',
+    operation_description='使用用户名和密码登录系统，成功后返回JWT Token和用户信息',
+    request_body=login_schema,
+    responses={
+        200: openapi.Response(
+            description='登录成功',
+            schema=login_response_schema
+        ),
+        401: openapi.Response(
+            description='登录失败，用户名或密码错误',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING, description='错误信息')
+                }
+            )
+        ),
+    },
+    tags=['认证接口']
+)
 def login_view(request):
     """
     登录接口
@@ -104,9 +219,62 @@ class CustomTokenRefreshView(TokenRefreshView):
     """自定义刷新Token视图"""
     serializer_class = RefreshTokenSerializer
 
+    @swagger_auto_schema(
+        operation_summary='刷新访问令牌',
+        operation_description='使用刷新令牌获取新的访问令牌',
+        request_body=refresh_schema,
+        responses={
+            200: openapi.Response(
+                description='刷新成功',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'access': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description='新的访问令牌'
+                        ),
+                        'refresh': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description='新的刷新令牌（如果启用了轮换）'
+                        ),
+                    }
+                )
+            ),
+            401: openapi.Response(
+                description='刷新令牌无效或已过期'
+            ),
+        },
+        tags=['认证接口']
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+@swagger_auto_schema(
+    operation_summary='用户登出',
+    operation_description='将刷新令牌加入黑名单，使用户退出登录',
+    request_body=logout_schema,
+    responses={
+        200: openapi.Response(
+            description='登出成功',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING, example='登出成功')
+                }
+            )
+        ),
+        400: openapi.Response(
+            description='请求参数错误或令牌无效'
+        ),
+        401: openapi.Response(
+            description='未授权，需要先登录'
+        ),
+    },
+    tags=['认证接口']
+)
 def logout_view(request):
     """
     登出接口
@@ -145,12 +313,70 @@ class UserProfileView(RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = UserProfileSerializer
 
+    @swagger_auto_schema(
+        operation_summary='获取当前用户信息',
+        operation_description='获取当前登录用户的详细信息，包括角色、权限等',
+        responses={
+            200: openapi.Response(
+                description='获取成功',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='用户ID'),
+                        'username': openapi.Schema(type=openapi.TYPE_STRING, description='用户名'),
+                        'real_name': openapi.Schema(type=openapi.TYPE_STRING, description='真实姓名'),
+                        'email': openapi.Schema(type=openapi.TYPE_STRING, description='邮箱'),
+                        'phone': openapi.Schema(type=openapi.TYPE_STRING, description='手机号'),
+                        'role': openapi.Schema(type=openapi.TYPE_STRING, description='角色'),
+                        'is_superuser': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='是否超级管理员'),
+                        'last_login': openapi.Schema(type=openapi.TYPE_STRING, description='最后登录时间'),
+                        'last_login_ip': openapi.Schema(type=openapi.TYPE_STRING, description='最后登录IP'),
+                        'permissions': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(type=openapi.TYPE_STRING),
+                            description='权限列表'
+                        ),
+                    }
+                )
+            ),
+            401: openapi.Response(
+                description='未授权，需要先登录'
+            ),
+        },
+        tags=['认证接口']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
     def get_object(self):
         return self.request.user
 
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+@swagger_auto_schema(
+    operation_summary='修改密码',
+    operation_description='修改当前登录用户的密码',
+    request_body=change_password_schema,
+    responses={
+        200: openapi.Response(
+            description='密码修改成功',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING, example='密码修改成功')
+                }
+            )
+        ),
+        400: openapi.Response(
+            description='请求参数错误（如旧密码不正确、新密码不符合要求等）'
+        ),
+        401: openapi.Response(
+            description='未授权，需要先登录'
+        ),
+    },
+    tags=['认证接口']
+)
 def change_password_view(request):
     """
     修改密码

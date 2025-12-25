@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3:*)",
+      "Bash(python manage.py init_system:*)",
+      "Bash(python manage.py makemigrations:*)",
+      "Bash(bash:*)",
+      "Bash(~/miniconda3/bin/conda init:*)",
+      "Bash(source:*)",
+      "Bash(conda:*)",
+      "Bash(~/.bashrc)",
+      "Bash(python:*)"
+    ]
+  }
+}

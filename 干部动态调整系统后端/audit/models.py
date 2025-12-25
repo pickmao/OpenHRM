@@ -37,7 +37,9 @@ class AuditLog(models.Model):
         User,
         on_delete=models.PROTECT,
         related_name='audit_logs',
-        verbose_name='操作人'
+        verbose_name='操作人',
+        null=True,
+        blank=True
     )
     action = models.CharField(
         '操作类型',
@@ -91,4 +93,5 @@ class AuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.actor.username} - {self.get_action_display()} - {self.created_at}"
+        actor_name = self.actor.username if self.actor else '未知用户'
+        return f"{actor_name} - {self.get_action_display()} - {self.created_at}"
