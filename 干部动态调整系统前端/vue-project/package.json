@@ -12,11 +12,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "ant-design-vue": "^4.2.6",
     "axios": "^1.13.2",
     "element-plus": "^2.13.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.25",
-    "vue-router": "^4.6.4"
+    "vue-router": "^4.6.4",
+    "vue3-org-chart": "^0.2.5",
+    "vue3-tree-org": "^4.2.2"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.2",

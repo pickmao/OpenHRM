@@ -11,7 +11,15 @@
       "Bash(source:*)",
       "Bash(conda:*)",
       "Bash(~/.bashrc)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(npm install:*)",
+      "Bash(psql:*)",
+      "Bash(git clone:*)",
+      "Bash(find:*)",
+      "Bash(pkill:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "WebSearch"
     ]
   }
 }

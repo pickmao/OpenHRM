@@ -11,8 +11,37 @@ const routes = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('@/views/Home.vue'),
+    component: () => import('@/views/Dashboard.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('@/views/Dashboard.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/cadre/roster',
+    name: 'PersonnelRoster',
+    component: () => import('@/views/PersonnelRoster.vue'),
+    meta: { requiresAuth: true }
+  },
+  // 组织架构管理
+  {
+    path: '/org',
+    redirect: '/org/structure'
+  },
+  {
+    path: '/org/structure',
+    name: 'OrgStructure',
+    component: () => import('@/views/org/Structure.vue'),
+    meta: { requiresAuth: true, title: '组织架构' }
+  },
+  {
+    path: '/org/department',
+    name: 'OrgDepartment',
+    component: () => import('@/views/org/Department.vue'),
+    meta: { requiresAuth: true, title: '部门管理' }
   }
 ]
 

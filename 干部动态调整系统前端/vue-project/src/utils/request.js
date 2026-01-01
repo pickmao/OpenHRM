@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus'
 
 // 创建axios实例
 const request = axios.create({
-  baseURL: 'http://localhost:8000/api', // 后端API地址
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api', // 后端API地址
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -53,6 +53,11 @@ request.interceptors.response.use(
         case 500:
           ElMessage.error('服务器错误，请稍后重试')
           break
+        case 400:
+          // 400 错误不在这里处理，让调用方处理
+          // 只在控制台打印，方便调试
+          console.error('400 错误详情:', data)
+          break
         default:
           ElMessage.error(data.detail || '请求失败')
       }
@@ -62,6 +67,7 @@ request.interceptors.response.use(
       ElMessage.error('请求配置错误')
     }
 
+    // 返回完整的错误对象，让调用方能获取到详细信息
     return Promise.reject(error)
   }
 )

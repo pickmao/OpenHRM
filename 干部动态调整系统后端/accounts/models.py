@@ -45,6 +45,15 @@ class Role(models.Model):
         (CADRE_SELF, '本人账号'),
     ]
 
+    # 角色代码到名称的映射
+    ROLE_CHOICES_DICT = {
+        SUPER_ADMIN: '系统超级管理员',
+        POLITICAL_OFFICE_ADMIN: '政治处管理员',
+        DEPT_MANAGER: '部门/支部负责人',
+        ANALYST: '研判/统计人员',
+        CADRE_SELF: '本人账号',
+    }
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField('角色代码', max_length=50, unique=True, choices=ROLE_CHOICES)
     name = models.CharField('角色名称', max_length=50)
