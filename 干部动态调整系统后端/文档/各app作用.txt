@@ -1,0 +1,52 @@
+下面按你当前的需求（干部信息集成 + 研判分析 + 干部画像 + 支部排序/结构分析 + 拖拽调整 + A/B 库冲突预警 + 权限审计）建议拆分 Django apps，并给出可直接执行的创建命令。
+
+## 建议创建的 Django apps
+
+1. **accounts**：用户、角色、部门/组织架构、权限扩展（RBAC/ABAC 的入口）
+2. **orgs**：支部/部门/岗位等组织单元（支部列表、排序、成员编制）
+3. **cadres**：干部主数据（基础信息/花名册导入、任职、学历等）
+4. **assessments**：考核（年度/季度/日常考核、等级、指标）
+5. **rewards_punishments**：奖励与处分（奖励汇总、处分记录）
+6. **inspections**：考察与研判（谈话、现实表现纪实、综合研判意见）
+7. **profiles**：画像与能力/性格（心理测评、能力雷达、标签体系）
+8. **training**：培训与成长档案（培训记录、述职报告、专项任务、急难险重）
+9. **analytics**：统计与报表（支部结构分析、干部结构分布、趋势图数据接口）
+10. **staffing**：人事调整（拖拽调入调出、调整方案/草案、结构实时刷新）
+11. **risk_rules**：A/B 库与预警规则（矛盾对、重点敏感人员、冲突校验与提示）
+12. **audit**：操作日志与审计（调整留痕、关键数据变更记录）
+
+> 说明：`staffing` + `risk_rules` 是你新增“动态调整与智能预警”的核心；`analytics` 负责左侧支部分析/排序的计算接口；`audit` 保障可追溯。
+
+---
+
+## 创建 app 的命令（直接复制执行）
+
+在你的 Django 项目根目录（有 `manage.py` 的目录）执行：
+
+```bash
+python manage.py startapp accounts
+python manage.py startapp orgs
+python manage.py startapp cadres
+python manage.py startapp assessments
+python manage.py startapp rewards_punishments
+python manage.py startapp inspections
+python manage.py startapp profiles
+python manage.py startapp training
+python manage.py startapp analytics
+python manage.py startapp staffing
+python manage.py startapp risk_rules
+python manage.py startapp audit
+```
+
+如果你想一次性粘贴执行（Linux/macOS/WSL）也可以：
+
+```bash
+for app in accounts orgs cadres assessments rewards_punishments inspections profiles training analytics staffing risk_rules audit; do
+  python manage.py startapp $app
+done
+```
+
+接下来你一般还要把这些 app 加进 `settings.py -> INSTALLED_APPS`，然后按模块建 models/serializers/views/urls 即可。
+
+
+
