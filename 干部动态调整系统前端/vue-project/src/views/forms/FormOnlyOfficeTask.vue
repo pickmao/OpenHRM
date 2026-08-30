@@ -19,6 +19,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formsApi } from '@/api/forms'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,8 +66,21 @@ const submit = async () => {
     router.push('/forms/tasks')
   } catch (_) { message.error('提交失败，请稍后重试') } finally { submitting.value = false }
 }
-onMounted(load)
-onBeforeUnmount(() => { if (editor?.destroyEditor) editor.destroyEditor() })
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'read_openhrm_onlyoffice_form_task', title: '读取当前在线填报任务', description: '读取当前 OnlyOffice 填报任务的基本信息，不修改或提交内容。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute() { if (!task.value) await load(); return { task: task.value && { id: task.value.id, templateName: task.value.template_name, batchName: task.value.batch_name, status: task.value.status, deadlineAt: task.value.deadline_at } } }
+    },
+    {
+      name: 'complete_openhrm_current_form_submission', title: '提交当前在线填报', description: '提交当前 OnlyOffice 填报任务；请确认已在编辑器中保存内容，此操作会将任务状态变为已提交。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false },
+      async execute() { if (!task.value) await load(); await formsApi.submitTask(route.params.id); message.success('填报已提交'); await router.push('/forms/tasks'); return { status: 'submitted', taskId: Number(route.params.id) } }
+    }
+  ])
+}
+onMounted(() => { registerWebMcpTools(); load() })
+onBeforeUnmount(() => { unregisterWebMcpTools(); if (editor?.destroyEditor) editor.destroyEditor() })
 </script>
 
 <style scoped>

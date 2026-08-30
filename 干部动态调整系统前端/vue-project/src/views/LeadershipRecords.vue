@@ -10,10 +10,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { leadershipAssessmentApi } from '@/api/assessments'
 import { useUserStore } from '@/stores/user'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const userStore = useUserStore(); const loading = ref(false); const files = ref([]); const records = ref([]); const detail = ref(null); const history = ref([]); const drawerOpen = ref(false); const editing = ref(false); const saving = ref(false); const uploadOpen = ref(false); const uploading = ref(false)
 const filters = reactive({ file: undefined, name: '' }); const pagination = reactive({ current: 1, pageSize: 20, total: 0 }); const upload = reactive({ period: null, file: null }); const editForm = reactive({})
@@ -21,10 +22,115 @@ const canManage = computed(() => userStore.userInfo?.is_superuser || ['assessmen
 const fields = [['name', '班子名称'], ['leadership_count', '领导现有人数', 'number'], ['vacancy_count', '空缺人数', 'number'], ['team_leader_count', '团队负责人人数', 'number'], ['team_leader_vacancy_count', '团队负责人空缺数', 'number'], ['average_age', '平均年龄', 'number'], ['max_age', '最大年龄', 'number'], ['min_age', '最小年龄', 'number'], ['postgraduate_count', '研究生人数', 'number'], ['undergraduate_count', '本科人数', 'number'], ['college_below_count', '大专及以下人数', 'number'], ['over_5_years_count', '任现职超过五年', 'number'], ['three_to_5_years_count', '任现职三至五年', 'number'], ['under_3_years_count', '任现职未满三年', 'number'], ['long_term_office_count', '长期机关工作人数', 'number'], ['balanced_count', '经历相对均衡人数', 'number'], ['long_term_prison_count', '长期监区工作人数', 'number'], ['ability_assessment', '能力评价', 'textarea'], ['performance_2023', '干事评价（2023）', 'textarea'], ['performance_2024', '干事评价（2024）', 'textarea'], ['shortcomings', '存在不足', 'textarea'], ['secretary_score', '支部书记评价分', 'number'], ['democratic_score', '民主测评分', 'number'], ['total_score', '得分', 'number'], ['approval_rate', '认可率', 'number'], ['ranking', '排名', 'number'], ['adjustment_suggestion', '调整建议', 'textarea']].map(([key, label, type = 'text']) => ({ key, label, type }))
 const columns = [{ title: '班子名称', dataIndex: 'name' }, { title: '领导人数', dataIndex: 'leadership_count', key: 'value', width: 110 }, { title: '空缺人数', dataIndex: 'vacancy_count', key: 'value', width: 110 }, { title: '平均年龄', dataIndex: 'average_age', key: 'value', width: 110 }, { title: '总分', dataIndex: 'total_score', key: 'value', width: 90 }, { title: '排名', dataIndex: 'ranking', key: 'value', width: 80 }, { title: '操作', key: 'action', width: 100 }]
 const fileOptions = computed(() => files.value.map(item => ({ value: item.id, label: `${item.version_date} · ${item.file_name}` }))); const selectedFile = computed(() => files.value.find(item => item.id === filters.file))
-const loadFiles = async () => { const data = await leadershipAssessmentApi.getFiles(); files.value = data.results || data }; const loadRecords = async () => { loading.value = true; try { const data = await leadershipAssessmentApi.getRecords({ ...filters, page: pagination.current, page_size: pagination.pageSize }); records.value = data.results || data; pagination.total = data.count || records.value.length } finally { loading.value = false } }; const search = () => { pagination.current = 1; loadRecords() }; const onTableChange = page => { pagination.current = page.current; pagination.pageSize = page.pageSize; loadRecords() }
+const loadFiles = async () => { const data = await leadershipAssessmentApi.getFiles(); files.value = data.results || data }; const loadRecords = async () => { loading.value = true; try { const data = await leadershipAssessmentApi.getRecords({ ...filters, page: pagination.current, page_size: pagination.pageSize }); records.value = data.results || data; pagination.total = data.count || records.value.length } finally { loading.value = false } }; const search = async () => { pagination.current = 1; await loadRecords() }; const onTableChange = page => { pagination.current = page.current; pagination.pageSize = page.pageSize; loadRecords() }
 const openRecord = async record => { [detail.value, history.value] = await Promise.all([leadershipAssessmentApi.getRecord(record.id), leadershipAssessmentApi.getRecordHistory(record.id)]); editing.value = false; drawerOpen.value = true }; const startEdit = () => { fields.forEach(field => { editForm[field.key] = detail.value[field.key] }); editing.value = true }; const saveRecord = async () => { saving.value = true; try { detail.value = await leadershipAssessmentApi.updateRecord(detail.value.id, Object.fromEntries(fields.map(field => [field.key, editForm[field.key]]))); history.value = await leadershipAssessmentApi.getRecordHistory(detail.value.id); editing.value = false; message.success('记录已修改并已留痕'); loadRecords() } finally { saving.value = false } }; const showHistory = item => message.info(`修改前：${JSON.stringify(item.before_values)}\n修改后：${JSON.stringify(item.after_values)}`, 8)
-const captureFile = file => { upload.file = file; const match = file.name.match(/(\d{4})(\d{2})(\d{2})/); if (match && !upload.period) upload.period = `${match[1]}-${match[2]}-${match[3]}`; return false }; const clearFile = () => { upload.file = null }; const resetUpload = () => { upload.period = null; upload.file = null }; const submitUpload = async () => { if (!upload.period || !upload.file) return message.warning('请选择研判期间和 Excel 文件'); const form = new FormData(); form.append('version_date', upload.period); form.append('file', upload.file); uploading.value = true; try { const result = await leadershipAssessmentApi.uploadFile(form); message.success(result.message); await loadFiles(); filters.file = result.file_id; search(); uploadOpen.value = false; resetUpload() } catch (error) { message.error(error?.response?.data?.error || '导入失败') } finally { uploading.value = false } }
-onMounted(async () => { await loadFiles(); await loadRecords() })
+const captureFile = file => { upload.file = file; const match = file.name.match(/(\d{4})(\d{2})(\d{2})/); if (match && !upload.period) upload.period = `${match[1]}-${match[2]}-${match[3]}`; return false }
+const clearFile = () => { upload.file = null }
+const resetUpload = () => { upload.period = null; upload.file = null }
+const submitUpload = async () => {
+  if (!upload.period || !upload.file) {
+    const error = '请选择研判期间和 Excel 文件'
+    message.warning(error)
+    throw new Error(error)
+  }
+  const form = new FormData()
+  form.append('version_date', upload.period)
+  form.append('file', upload.file)
+  uploading.value = true
+  try {
+    const result = await leadershipAssessmentApi.uploadFile(form)
+    const response = { fileId: result.file_id, fileName: result.file_name, totalRecords: result.total_records }
+    message.success(result.message)
+    await loadFiles()
+    filters.file = result.file_id
+    await search()
+    uploadOpen.value = false
+    resetUpload()
+    return response
+  } catch (error) {
+    const detail = error?.response?.data?.error || '导入失败'
+    message.error(detail)
+    throw new Error(detail)
+  } finally {
+    uploading.value = false
+  }
+}
+
+let unregisterWebMcpTools = () => {}
+
+const registerUploadTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'list_openhrm_leadership_assessment_records',
+      title: '读取领导班子研判记录',
+      description: '按可选文件版本和班子名称读取领导班子研判记录及文件版本，不修改数据。',
+      inputSchema: { type: 'object', properties: { fileId: { type: 'integer', minimum: 1 }, name: { type: 'string' } }, additionalProperties: false },
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      async execute(input) { filters.file = input.fileId; filters.name = input.name?.trim() || ''; await Promise.all([loadFiles(), search()]); return { total: pagination.total, files: files.value.map(({ id, version_date, file_name }) => ({ id, versionDate: version_date, fileName: file_name })), records: records.value.map(({ id, name, leadership_count, vacancy_count, average_age, total_score, ranking }) => ({ id, name, leadershipCount: leadership_count, vacancyCount: vacancy_count, averageAge: average_age, totalScore: total_score, ranking })) } }
+    },
+    {
+      name: 'read_openhrm_leadership_assessment_record',
+      title: '读取领导班子研判详情',
+      description: '读取一条领导班子研判记录及其修改历史，不修改数据。',
+      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 } }, required: ['recordId'], additionalProperties: false },
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      async execute(input) { const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); await openRecord(record); return { record: detail.value, history: history.value } }
+    },
+    {
+      name: 'stage_openhrm_leadership_assessment_record_update',
+      title: '配置领导班子研判修改',
+      description: '在当前记录详情页暂存可编辑研判字段，不会保存到系统。',
+      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 }, values: { type: 'object', additionalProperties: true, description: '以字段名为键的修改值；字段必须来自记录详情的可编辑字段' } }, required: ['recordId', 'values'], additionalProperties: false },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      async execute(input) { if (!canManage.value) throw new Error('当前用户没有修改领导班子研判记录的权限'); const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); const allowed = new Set(fields.map(item => item.key)); const invalid = Object.keys(input.values).find(key => !allowed.has(key)); if (invalid) throw new Error(`不支持修改字段：${invalid}`); await openRecord(record); startEdit(); Object.assign(editForm, input.values); return { status: 'staged', recordId: detail.value.id, fields: Object.keys(input.values) } }
+    },
+    {
+      name: 'complete_openhrm_leadership_assessment_record_update',
+      title: '保存领导班子研判修改',
+      description: '保存指定领导班子研判记录的修改，并写入修改历史；这是会修改研判数据的操作。',
+      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 }, values: { type: 'object', additionalProperties: true } }, required: ['recordId', 'values'], additionalProperties: false },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      async execute(input) { if (!canManage.value) throw new Error('当前用户没有修改领导班子研判记录的权限'); const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); const allowed = new Set(fields.map(item => item.key)); const invalid = Object.keys(input.values).find(key => !allowed.has(key)); if (invalid) throw new Error(`不支持修改字段：${invalid}`); await openRecord(record); startEdit(); Object.assign(editForm, input.values); await saveRecord(); return { status: 'saved', recordId: detail.value.id, fields: Object.keys(input.values) } }
+    },
+    {
+      name: 'start_leadership_assessment_excel_upload',
+      title: '开始上传领导班子研判 Excel',
+      description: '打开领导班子研判 Excel 上传流程。在调用完成上传工具前，先通过页面文件选择器暂存一个标准 .xlsx 文件。',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute() {
+        if (!canManage.value) throw new Error('当前用户没有上传领导班子研判文件的权限')
+        resetUpload()
+        uploadOpen.value = true
+        return { status: 'awaiting_file', acceptedFileType: '.xlsx' }
+      },
+    },
+    {
+      name: 'complete_leadership_assessment_excel_upload',
+      title: '完成上传领导班子研判 Excel',
+      description: '上传已通过页面文件选择器暂存的领导班子研判 Excel，并将其关联到指定研判期间。',
+      inputSchema: {
+        type: 'object',
+        properties: { period: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' } },
+        required: ['period'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      async execute(input) {
+        if (!canManage.value) throw new Error('当前用户没有上传领导班子研判文件的权限')
+        if (!input || typeof input.period !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.period)) {
+          throw new Error('研判期间必须为 YYYY-MM-DD 格式')
+        }
+        if (!upload.file) throw new Error('请先通过页面文件选择器暂存标准 .xlsx 文件')
+        upload.period = input.period
+        return submitUpload()
+      },
+    },
+  ])
+}
+
+onMounted(async () => { registerUploadTools(); await loadFiles(); await loadRecords() })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>.page-shell { padding: 8px 0; }.toolbar, .version-alert, .history { margin-bottom: 16px; }.hint { margin-top: 6px; color: #8c8c8c; font-size: 12px; }.drawer-actions { margin-bottom: 16px; }</style>

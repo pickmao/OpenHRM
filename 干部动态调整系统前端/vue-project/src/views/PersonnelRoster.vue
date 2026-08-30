@@ -252,7 +252,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   UploadOutlined,
@@ -265,6 +265,7 @@ import {
   WomanOutlined
 } from '@ant-design/icons-vue'
 import request from '@/utils/request'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 // 响应式数据
 const uploading = ref(false)
@@ -519,11 +520,46 @@ const handleBatchDelete = async () => {
   }
 }
 
+const rosterFilterSchema = { type: 'object', properties: { search: { type: 'string', description: '姓名、部门、警号或身份证号关键词' }, gender: { type: 'string', enum: ['M', 'F'] }, politicalStatus: { type: 'string', enum: ['中共党员', '共青团员', '群众'] }, page: { type: 'integer', minimum: 1 }, pageSize: { type: 'integer', minimum: 1, maximum: 100 } }, additionalProperties: false }
+const applyRosterFilters = async input => { searchText.value = input.search?.trim() || ''; filterGender.value = input.gender; filterPoliticalStatus.value = input.politicalStatus; pagination.current = input.page || 1; pagination.pageSize = input.pageSize || pagination.pageSize; await loadData(); await nextTick() }
+const findRosterRecord = id => { const record = dataSource.value.find(item => item.id === id); if (!record) throw new Error('未找到指定花名册记录，请先读取花名册列表'); return record }
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'read_openhrm_roster_statistics', title: '读取花名册统计', description: '读取花名册总人数、部门数和性别统计，不读取个人明细，也不修改数据。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute() { await loadStatistics(); return { total: statistics.total, departments: statistics.departments, maleCount: statistics.male_count, femaleCount: statistics.female_count } }
+    },
+    {
+      name: 'list_openhrm_roster_records', title: '读取花名册', description: '按可选关键词、性别、政治面貌和分页读取花名册记录，不修改数据。', inputSchema: rosterFilterSchema, annotations: { readOnlyHint: true, untrustedContentHint: true },
+      async execute(input) { await applyRosterFilters(input); return { total: pagination.total, page: pagination.current, pageSize: pagination.pageSize, records: dataSource.value.map(({ id, serial_number, name, department, gender, age, police_number, political_status, position }) => ({ id, serialNumber: serial_number, name, department, gender, age, policeNumber: police_number, politicalStatus: political_status, position })) } }
+    },
+    {
+      name: 'read_openhrm_roster_record', title: '读取花名册详情', description: '在当前页面打开并返回一条花名册记录详情，不修改数据。', inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 } }, required: ['recordId'], additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: true },
+      async execute(input) { const record = findRosterRecord(input.recordId); viewDetail(record); await nextTick(); return { record: currentRecord.value } }
+    },
+    {
+      name: 'stage_openhrm_roster_record_selection', title: '选择花名册记录', description: '在当前页面勾选要批量处理的花名册记录，仅暂存选择，不会删除数据。', inputSchema: { type: 'object', properties: { recordIds: { type: 'array', items: { type: 'integer', minimum: 1 }, uniqueItems: true } }, required: ['recordIds'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      async execute(input) { input.recordIds.forEach(findRosterRecord); selectedRowKeys.value = [...input.recordIds]; await nextTick(); return { status: 'staged', recordIds: selectedRowKeys.value } }
+    },
+    {
+      name: 'complete_openhrm_roster_record_deletion', title: '删除花名册记录', description: '永久删除指定的一条花名册记录；这是不可逆的人员数据删除操作。', inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 } }, required: ['recordId'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      async execute(input) { const record = findRosterRecord(input.recordId); await request.delete(`/roster/${record.id}/`); await Promise.all([loadData(), loadStatistics()]); message.success('删除成功'); return { status: 'deleted', recordId: record.id, name: record.name } }
+    },
+    {
+      name: 'complete_openhrm_roster_batch_deletion', title: '批量删除花名册记录', description: '永久删除所列花名册记录；这是不可逆的人员数据删除操作。', inputSchema: { type: 'object', properties: { recordIds: { type: 'array', items: { type: 'integer', minimum: 1 }, minItems: 1, uniqueItems: true } }, required: ['recordIds'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      async execute(input) { const records = input.recordIds.map(findRosterRecord); await Promise.all(records.map(record => request.delete(`/roster/${record.id}/`))); selectedRowKeys.value = []; await Promise.all([loadData(), loadStatistics()]); message.success(`成功删除 ${records.length} 条记录`); return { status: 'deleted', count: records.length, recordIds: input.recordIds } }
+    }
+  ])
+}
+
 // 页面加载
 onMounted(() => {
+  registerWebMcpTools()
   loadStatistics()
   loadData()
 })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>

@@ -69,11 +69,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import request from '@/utils/request'
 import { formsApi } from '@/api/forms'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const templates = ref([])
 const users = ref([])
@@ -107,16 +108,16 @@ const loadTemplates = async () => {
   try {
     const result = await formsApi.getTemplates({ active: true })
     // 数据库中的旧模板可保留作历史记录；源文件随故障磁盘丢失时，不能再用于 OnlyOffice 填报。
-    templates.value = (Array.isArray(result) ? result : []).filter(item => item.source_file)
+    templates.value = (Array.isArray(result) ? result : result?.results || []).filter(item => item.source_file)
   } finally { loadingTemplates.value = false }
 }
 const loadUsers = async () => {
   loadingUsers.value = true
-  try { users.value = await request.get('/admin/users/') } catch (_) { users.value = [] } finally { loadingUsers.value = false }
+  try { const result = await request.get('/admin/users/'); users.value = Array.isArray(result) ? result : result?.results || [] } catch (_) { users.value = [] } finally { loadingUsers.value = false }
 }
 const loadBatches = async () => {
   loadingBatches.value = true
-  try { batches.value = await formsApi.getDispatches() } finally { loadingBatches.value = false }
+  try { const result = await formsApi.getDispatches(); batches.value = Array.isArray(result) ? result : result?.results || [] } finally { loadingBatches.value = false }
 }
 const syncTemplateName = () => {
   const item = templates.value.find(value => value.id === form.templateId)
@@ -174,7 +175,45 @@ const publish = async () => {
   } catch (error) { message.error(error.response?.data?.detail || error.message || '下发失败') } finally { publishing.value = false }
 }
 
-onMounted(() => { loadTemplates(); loadUsers(); loadBatches() })
+const dispatchSchema = { type: 'object', properties: { templateId: { type: 'integer', minimum: 1 }, batchMode: { type: 'string', enum: ['new', 'existing'] }, batchName: { type: 'string' }, batchId: { type: 'integer', minimum: 1 }, deadlineAt: { type: 'string', description: '新批次截止时间，ISO 日期或本地日期时间字符串' }, recipientMode: { type: 'string', enum: ['selected', 'all'] }, userIds: { type: 'array', items: { type: 'integer', minimum: 1 }, uniqueItems: true } }, required: ['templateId', 'batchMode', 'recipientMode'], additionalProperties: false }
+const stageDispatch = async input => {
+  const template = templates.value.find(item => item.id === input.templateId); if (!template) throw new Error('未找到指定的可用模板，请先读取下发选项')
+  if (input.batchMode === 'new' && (!input.batchName?.trim() || !input.deadlineAt)) throw new Error('新建批次必须提供批次名称和截止时间')
+  if (input.batchMode === 'existing' && !batches.value.some(item => item.id === input.batchId && item.status !== 'CLOSED')) throw new Error('未找到可追加的填报批次')
+  if (input.recipientMode === 'selected') { if (!input.userIds?.length) throw new Error('请选择至少一名填报人员'); const known = new Set(users.value.map(item => item.id)); const unknown = input.userIds.find(id => !known.has(id)); if (unknown) throw new Error(`未知用户 ID：${unknown}`) }
+  Object.assign(form, { templateId: input.templateId, batchId: input.batchId, batchName: input.batchName?.trim() || '', deadlineAt: input.deadlineAt || null, userIds: input.userIds ? [...input.userIds] : [] }); batchMode.value = input.batchMode; recipientMode.value = input.recipientMode; await nextTick()
+}
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'read_openhrm_form_dispatch_options', title: '读取表单下发选项', description: '读取可用 Excel 模板、可选人员及未关闭批次，不会下发表单。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute() { await Promise.all([loadTemplates(), loadUsers(), loadBatches()]); return { templates: templates.value.map(({ id, name, code }) => ({ id, name, code })), users: users.value.map(({ id, username, real_name }) => ({ id, username, realName: real_name })), batches: batchOptions.value } }
+    },
+    {
+      name: 'stage_openhrm_form_dispatch', title: '配置表单下发', description: '在当前页面填写下发批次、接收人员和截止时间，仅暂存，不会创建任务。', inputSchema: dispatchSchema, annotations: { readOnlyHint: false },
+      async execute(input) { await stageDispatch(input); return { status: 'staged', templateId: form.templateId, batchMode: batchMode.value, recipientMode: recipientMode.value, recipientCount: recipientMode.value === 'all' ? users.value.length : form.userIds.length } }
+    },
+    {
+      name: 'preview_openhrm_form_dispatch', title: '预览表单下发', description: '预览所配置的表单下发任务，不会创建批次或任务。', inputSchema: dispatchSchema, annotations: { readOnlyHint: true },
+      async execute(input) { await stageDispatch(input); const result = await formsApi.previewDispatch(payload()); previewItems.value = result.tasks || []; previewOpen.value = true; return { taskCount: previewItems.value.length, tasks: previewItems.value.map(({ template_name, assignee_name, org_unit }) => ({ templateName: template_name, assigneeName: assignee_name, orgUnit: org_unit })) } }
+    },
+    {
+      name: 'complete_openhrm_form_dispatch', title: '下发表单任务', description: '创建表单下发批次和接收人任务，或向现有批次追加任务；这是会写入系统并通知接收范围的操作。', inputSchema: dispatchSchema, annotations: { readOnlyHint: false },
+      async execute(input) { await stageDispatch(input); publishing.value = true; try { const result = await formsApi.publishDispatch(payload()); await loadBatches(); form.userIds = []; message.success(`下发成功，已创建 ${result.summary.created_tasks} 个任务`); return { status: 'published', batchId: result.batch?.id, createdTasks: result.summary.created_tasks } } finally { publishing.value = false } }
+    },
+    {
+      name: 'stage_openhrm_excel_template_upload', title: '配置 Excel 表单模板', description: '填写 Excel 模板名称和编码；文件需先通过当前页面文件选择器暂存，此操作不会上传文件。', inputSchema: { type: 'object', properties: { name: { type: 'string', minLength: 1 }, code: { type: 'string', minLength: 1 } }, required: ['name', 'code'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      async execute(input) { upload.name = input.name.trim(); upload.code = input.code.trim(); await nextTick(); return { status: selectedFile.value ? 'file_staged' : 'awaiting_file', acceptedFileTypes: ['.xlsx', '.xls'] } }
+    },
+    {
+      name: 'complete_openhrm_excel_template_upload', title: '上传 Excel 表单模板', description: '将页面中已选择的 Excel 文件上传为新表单模板；这是会上传文件并创建模板的操作。', inputSchema: { type: 'object', properties: { name: { type: 'string', minLength: 1 }, code: { type: 'string', minLength: 1 } }, required: ['name', 'code'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      async execute(input) { upload.name = input.name.trim(); upload.code = input.code.trim(); if (!selectedFile.value) throw new Error('请先通过页面文件选择器暂存 .xlsx 或 .xls 文件'); await uploadTemplate(); return { status: 'uploaded', templateId: form.templateId, name: upload.name, code: upload.code } }
+    }
+  ])
+}
+onMounted(() => { registerWebMcpTools(); loadTemplates(); loadUsers(); loadBatches() })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>

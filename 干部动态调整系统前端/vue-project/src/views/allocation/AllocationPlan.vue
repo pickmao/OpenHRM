@@ -71,11 +71,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { createTransferRequest, getDepartmentMembers, getOrgTree } from '@/api/org'
 import { useUserStore } from '@/stores/user'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const userStore = useUserStore()
 const route = useRoute()
@@ -156,7 +157,36 @@ const submit = async () => {
   }
 }
 
+const transferSchema = { type: 'object', properties: { fromDepartmentId: { type: 'integer', minimum: 1 }, toDepartmentId: { type: 'integer', minimum: 1 }, memberIds: { type: 'array', items: { type: 'integer', minimum: 1 }, minItems: 1, uniqueItems: true }, effectiveDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, reason: { type: 'string', minLength: 1, maxLength: 500 }, newPosition: { type: 'string' } }, required: ['fromDepartmentId', 'toDepartmentId', 'memberIds', 'effectiveDate', 'reason'], additionalProperties: false }
+const stageTransfer = async input => {
+  if (!canTransfer.value) throw new Error('当前账号没有人员调配权限')
+  if (input.fromDepartmentId === input.toDepartmentId) throw new Error('调出部门和调入部门不能相同')
+  form.fromDeptId = input.fromDepartmentId; await loadMembers(input.fromDepartmentId)
+  const allowedMemberIds = new Set(memberOptions.value.map(item => item.value)); const unknown = input.memberIds.find(id => !allowedMemberIds.has(id))
+  if (unknown) throw new Error(`人员 ${unknown} 不属于所选调出部门`)
+  Object.assign(form, { toDeptId: input.toDepartmentId, memberIds: [...input.memberIds], effectiveDate: input.effectiveDate, reason: input.reason.trim(), newPosition: input.newPosition?.trim() || '' })
+  await nextTick()
+}
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'read_openhrm_transfer_options', title: '读取调配选项', description: '读取组织树；提供调出部门后同时读取可调配人员，不会提交调配。',
+      inputSchema: { type: 'object', properties: { fromDepartmentId: { type: 'integer', minimum: 1 } }, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute(input) { await loadTree(); if (input.fromDepartmentId) { form.fromDeptId = input.fromDepartmentId; await loadMembers(input.fromDepartmentId) } return { canTransfer: canTransfer.value, departmentTree: deptTree.value, members: memberOptions.value.map(({ value, label }) => ({ userId: value, label })) } }
+    },
+    {
+      name: 'stage_openhrm_department_transfer', title: '配置人员调配', description: '在当前调配页面选择部门、人员、日期和原因，仅暂存，不会提交调配。', inputSchema: transferSchema, annotations: { readOnlyHint: false },
+      async execute(input) { await stageTransfer(input); return { status: 'staged', fromDepartmentId: form.fromDeptId, toDepartmentId: form.toDeptId, memberIds: form.memberIds, effectiveDate: form.effectiveDate } }
+    },
+    {
+      name: 'complete_openhrm_department_transfer', title: '提交人员调配', description: '将指定人员从调出部门调配到调入部门；这会立即修改人员组织归属。', inputSchema: transferSchema, annotations: { readOnlyHint: false },
+      async execute(input) { await stageTransfer(input); await formRef.value.validate(); submitting.value = true; try { const result = await createTransferRequest({ members: form.memberIds, from_dept: form.fromDeptId, to_dept: form.toDeptId, effective_date: form.effectiveDate, reason: form.reason, new_position: form.newPosition || undefined }); message.success(`已完成 ${result.success || 0} 人的部门调配`); reset(); return { status: 'completed', success: result.success || 0, failed: result.failed || 0 } } finally { submitting.value = false } }
+    }
+  ])
+}
 onMounted(async () => {
+  registerWebMcpTools()
   await loadTree()
   const sourceId = route.query.fromDeptId
   if (sourceId) {
@@ -164,6 +194,7 @@ onMounted(async () => {
     await loadMembers(sourceId)
   }
 })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>

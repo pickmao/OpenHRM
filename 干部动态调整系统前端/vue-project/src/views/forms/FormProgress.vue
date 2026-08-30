@@ -32,9 +32,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { formsApi } from '@/api/forms'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const router = useRouter()
 const batches = ref([])
@@ -59,7 +60,7 @@ const pendingColumns = [
   { title: '表格', dataIndex: 'template_name' }, { title: '截止时间', key: 'deadline', width: 220 }
 ]
 const summary = computed(() => dashboard.value?.summary || progress.value?.summary || { total: 0, submitted: 0, pending: 0, draft: 0, returned: 0, overdue: 0 })
-const loadBatches = async () => { loading.value = true; try { batches.value = await formsApi.getDispatches() } finally { loading.value = false } }
+const loadBatches = async () => { loading.value = true; try { const result = await formsApi.getDispatches(); batches.value = Array.isArray(result) ? result : result?.results || [] } finally { loading.value = false } }
 const showBatch = async batch => {
   selectedBatch.value = batch; drawerOpen.value = true; loadingTasks.value = true
   try {
@@ -70,7 +71,26 @@ const showBatch = async batch => {
   } finally { loadingTasks.value = false }
 }
 const viewResult = task => router.push({ name: 'FormOnlyOfficeTaskView', params: { id: task.id } })
-onMounted(loadBatches)
+const findBatch = batchId => { const batch = batches.value.find(item => item.id === batchId); if (!batch) throw new Error('未找到指定下发批次，请先读取下发批次'); return batch }
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'list_openhrm_form_dispatches', title: '读取表单下发批次', description: '读取所有表单下发批次及其截止时间，不修改数据。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute() { await loadBatches(); return { batches: batches.value.map(({ id, name, deadline_at, status }) => ({ id, name, deadlineAt: deadline_at, status })) } }
+    },
+    {
+      name: 'read_openhrm_form_dispatch_progress', title: '读取填报进度', description: '读取一个下发批次的完成汇总、任务状态和待办人员，不修改数据。', inputSchema: { type: 'object', properties: { batchId: { type: 'integer', minimum: 1 } }, required: ['batchId'], additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute(input) { const batch = findBatch(input.batchId); await showBatch(batch); return { batch: { id: batch.id, name: batch.name }, summary: summary.value, tasks: tasks.value.map(({ id, assignee_name_snapshot, template_name, status }) => ({ id, assigneeName: assignee_name_snapshot, templateName: template_name, status })), pendingUsers: pendingUsers.value.map(({ assignee_name, org_unit, template_name, deadline_at }) => ({ assigneeName: assignee_name, orgUnit: org_unit, templateName: template_name, deadlineAt: deadline_at })) } }
+    },
+    {
+      name: 'start_openhrm_form_result_view', title: '查看填报结果', description: '打开指定任务的只读填报结果页面，不会修改表单。', inputSchema: { type: 'object', properties: { taskId: { type: 'integer', minimum: 1 } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute(input) { const task = tasks.value.find(item => item.id === input.taskId); if (!task) throw new Error('请先读取该批次的填报进度，再指定任务 ID'); viewResult(task); return { status: 'ready', taskId: task.id } }
+    }
+  ])
+}
+onMounted(async () => { registerWebMcpTools(); await loadBatches() })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>.page-shell { padding: 8px 0; }.progress-summary, .pending-card { margin-bottom: 16px; }</style>

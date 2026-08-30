@@ -154,7 +154,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -174,6 +174,7 @@ import {
   updateDepartment,
   deleteDepartment
 } from '@/api/org'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const router = useRouter()
 
@@ -421,10 +422,37 @@ const resetForm = () => {
   formRef.value?.clearValidate()
 }
 
+const findTreeNode = (nodes, id) => {
+  for (const node of nodes) { if (node.id === id) return node; const child = findTreeNode(node.children || [], id); if (child) return child }
+}
+const structureDraftSchema = { type: 'object', properties: { name: { type: 'string', minLength: 1 }, code: { type: 'string' }, unitType: { type: 'string', enum: ['BRANCH', 'DIVISION', 'OFFICE', 'DEPARTMENT', 'TEAM'] }, sortOrder: { type: 'integer', minimum: 0 }, isActive: { type: 'boolean' } }, required: ['name', 'unitType'], additionalProperties: false }
+const applyStructureDraft = async input => { formData.name = input.name.trim(); formData.code = input.code?.trim() || ''; formData.unit_type = input.unitType; formData.sort_order = input.sortOrder ?? 0; formData.is_active = input.isActive ?? true; await nextTick() }
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'read_openhrm_organization_tree', title: '读取组织架构', description: '读取完整组织树；可选指定一个部门以读取其在岗成员，不修改数据。',
+      inputSchema: { type: 'object', properties: { departmentId: { type: 'integer', minimum: 1, description: '可选部门 ID' } }, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute(input) { await loadTreeData(); if (input.departmentId) { const node = findTreeNode(treeData.value, input.departmentId); if (!node) throw new Error('未找到指定部门'); await handleSelect([node.id], { node: { dataRef: node } }) } return { tree: treeData.value, selectedDepartment: selectedNode.value && { id: selectedNode.value.id, name: selectedNode.value.name }, members: members.value.map(({ id, position, is_manager, user_info }) => ({ id, username: user_info?.username, name: user_info?.real_name, position, isManager: is_manager })) } }
+    },
+    {
+      name: 'stage_openhrm_root_department_creation', title: '配置根部门', description: '填写新根部门的表单，仅暂存于当前页面，不会创建部门。', inputSchema: structureDraftSchema, annotations: { readOnlyHint: false },
+      async execute(input) { handleAddRoot(); await applyStructureDraft(input); return { status: 'staged', type: 'root', name: formData.name } }
+    },
+    {
+      name: 'stage_openhrm_child_department_creation', title: '配置子部门', description: '填写指定父部门下的新子部门，仅暂存于当前页面，不会创建部门。', inputSchema: { ...structureDraftSchema, properties: { ...structureDraftSchema.properties, parentId: { type: 'integer', minimum: 1 } }, required: ['parentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
+      async execute(input) { const parent = findTreeNode(treeData.value, input.parentId); if (!parent) throw new Error('未找到指定父部门'); handleAddChild(parent); await applyStructureDraft(input); return { status: 'staged', type: 'child', parentId: parent.id, name: formData.name } }
+    },
+    {
+      name: 'start_openhrm_department_member_transfer', title: '开始部门人员调配', description: '打开指定部门的人员调配计划，仅开始配置，不会提交调配。', inputSchema: { type: 'object', properties: { departmentId: { type: 'integer', minimum: 1 } }, required: ['departmentId'], additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute(input) { const node = findTreeNode(treeData.value, input.departmentId); if (!node) throw new Error('未找到指定部门'); await router.push({ path: '/allocation/plan', query: { fromDeptId: node.id } }); return { status: 'ready', departmentId: node.id, route: '/allocation/plan' } }
+    }
+  ])
+}
+
 // 页面加载
-onMounted(() => {
-  loadTreeData()
-})
+onMounted(() => { registerWebMcpTools(); loadTreeData() })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>
