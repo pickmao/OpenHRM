@@ -41,7 +41,7 @@ export function getDepartmentList(params) {
  */
 export function getDepartmentDetail(id) {
   return request({
-    url: `/org/units/${id}`,
+    url: `/org/units/${id}/`,
     method: 'get'
   })
 }
@@ -73,7 +73,7 @@ export function createDepartment(data) {
  */
 export function updateDepartment(id, data) {
   return request({
-    url: `/org/units/${id}`,
+    url: `/org/units/${id}/`,
     method: 'patch',
     data
   })
@@ -86,7 +86,7 @@ export function updateDepartment(id, data) {
  */
 export function deleteDepartment(id) {
   return request({
-    url: `/org/units/${id}`,
+    url: `/org/units/${id}/`,
     method: 'delete'
   })
 }
@@ -183,7 +183,7 @@ export function addMember(data) {
  */
 export function removeMember(id) {
   return request({
-    url: `/org/memberships/${id}`,
+    url: `/org/memberships/${id}/`,
     method: 'delete'
   })
 }
@@ -208,7 +208,7 @@ export function getUserMemberships(userId) {
  */
 export function getMemberDetail(id) {
   return request({
-    url: `/org/memberships/${id}`,
+    url: `/org/memberships/${id}/`,
     method: 'get'
   })
 }
@@ -221,7 +221,7 @@ export function getMemberDetail(id) {
  */
 export function updateMember(id, data) {
   return request({
-    url: `/org/memberships/${id}`,
+    url: `/org/memberships/${id}/`,
     method: 'patch',
     data
   })

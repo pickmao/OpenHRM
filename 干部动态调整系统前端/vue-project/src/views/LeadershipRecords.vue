@@ -20,6 +20,15 @@ const userStore = useUserStore(); const loading = ref(false); const files = ref(
 const filters = reactive({ file: undefined, name: '' }); const pagination = reactive({ current: 1, pageSize: 20, total: 0 }); const upload = reactive({ period: null, file: null }); const editForm = reactive({})
 const canManage = computed(() => userStore.userInfo?.is_superuser || ['assessments:manage', 'leadership:record:manage', 'leadership:file:manage'].some(permission => userStore.hasPermission?.(permission)))
 const fields = [['name', '班子名称'], ['leadership_count', '领导现有人数', 'number'], ['vacancy_count', '空缺人数', 'number'], ['team_leader_count', '团队负责人人数', 'number'], ['team_leader_vacancy_count', '团队负责人空缺数', 'number'], ['average_age', '平均年龄', 'number'], ['max_age', '最大年龄', 'number'], ['min_age', '最小年龄', 'number'], ['postgraduate_count', '研究生人数', 'number'], ['undergraduate_count', '本科人数', 'number'], ['college_below_count', '大专及以下人数', 'number'], ['over_5_years_count', '任现职超过五年', 'number'], ['three_to_5_years_count', '任现职三至五年', 'number'], ['under_3_years_count', '任现职未满三年', 'number'], ['long_term_office_count', '长期机关工作人数', 'number'], ['balanced_count', '经历相对均衡人数', 'number'], ['long_term_prison_count', '长期监区工作人数', 'number'], ['ability_assessment', '能力评价', 'textarea'], ['performance_2023', '干事评价（2023）', 'textarea'], ['performance_2024', '干事评价（2024）', 'textarea'], ['shortcomings', '存在不足', 'textarea'], ['secretary_score', '支部书记评价分', 'number'], ['democratic_score', '民主测评分', 'number'], ['total_score', '得分', 'number'], ['approval_rate', '认可率', 'number'], ['ranking', '排名', 'number'], ['adjustment_suggestion', '调整建议', 'textarea']].map(([key, label, type = 'text']) => ({ key, label, type }))
+const recordUpdateSchema = {
+  type: 'object',
+  properties: {
+    recordId: { type: 'string', minLength: 1, description: '研判记录 UUID。' },
+    values: { type: 'object', properties: Object.fromEntries(fields.map(({ key }) => [key, {}])), minProperties: 1, additionalProperties: false },
+  },
+  required: ['recordId', 'values'],
+  additionalProperties: false,
+}
 const columns = [{ title: '班子名称', dataIndex: 'name' }, { title: '领导人数', dataIndex: 'leadership_count', key: 'value', width: 110 }, { title: '空缺人数', dataIndex: 'vacancy_count', key: 'value', width: 110 }, { title: '平均年龄', dataIndex: 'average_age', key: 'value', width: 110 }, { title: '总分', dataIndex: 'total_score', key: 'value', width: 90 }, { title: '排名', dataIndex: 'ranking', key: 'value', width: 80 }, { title: '操作', key: 'action', width: 100 }]
 const fileOptions = computed(() => files.value.map(item => ({ value: item.id, label: `${item.version_date} · ${item.file_name}` }))); const selectedFile = computed(() => files.value.find(item => item.id === filters.file))
 const loadFiles = async () => { const data = await leadershipAssessmentApi.getFiles(); files.value = data.results || data }; const loadRecords = async () => { loading.value = true; try { const data = await leadershipAssessmentApi.getRecords({ ...filters, page: pagination.current, page_size: pagination.pageSize }); records.value = data.results || data; pagination.total = data.count || records.value.length } finally { loading.value = false } }; const search = async () => { pagination.current = 1; await loadRecords() }; const onTableChange = page => { pagination.current = page.current; pagination.pageSize = page.pageSize; loadRecords() }
@@ -88,7 +97,7 @@ const registerUploadTools = () => {
       name: 'complete_openhrm_leadership_assessment_record_update',
       title: '保存领导班子研判修改',
       description: '保存指定领导班子研判记录的修改，并写入修改历史；这是会修改研判数据的操作。',
-      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 }, values: { type: 'object', additionalProperties: true } }, required: ['recordId', 'values'], additionalProperties: false },
+      inputSchema: recordUpdateSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       async execute(input) { if (!canManage.value) throw new Error('当前用户没有修改领导班子研判记录的权限'); const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); const allowed = new Set(fields.map(item => item.key)); const invalid = Object.keys(input.values).find(key => !allowed.has(key)); if (invalid) throw new Error(`不支持修改字段：${invalid}`); await openRecord(record); startEdit(); Object.assign(editForm, input.values); await saveRecord(); return { status: 'saved', recordId: detail.value.id, fields: Object.keys(input.values) } }
     },

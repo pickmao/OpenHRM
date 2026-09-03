@@ -56,6 +56,15 @@ const canManage = computed(() => userStore.userInfo?.is_superuser || ['assessmen
 const fields = [
   ['name', '姓名'], ['department', '单位'], ['position', '职务'], ['position_category', '职务类别', 'select'], ['age', '年龄', 'number'], ['health_status', '健康程度'], ['education', '学历'], ['professional_title', '专业技术职称'], ['join_prison_date', '参加监狱工作时间', 'date'], ['service_years', '任职年限', 'number'], ['office_work_years', '机关工作年限', 'number'], ['prison_work_years', '监区工作年限', 'number'], ['main_business', '主要从事业务', 'textarea'], ['annual_assessment_3years', '近三年年度考核', 'textarea'], ['quarterly_assessment', '今年季度考核', 'textarea'], ['rewards_3years', '近三年奖励', 'textarea'], ['penalties_3years', '近三年受到处理', 'textarea'], ['personality', '性格特点', 'textarea'], ['ability_assessment', '能力评估', 'textarea'], ['performance_2023', '干事评价（2023）', 'textarea'], ['performance_2024', '干事评价（2024）', 'textarea'], ['main_performance', '主要表现', 'textarea'], ['shortcomings', '存在不足', 'textarea'], ['evaluation_assessment', '评价研判', 'textarea'], ['talk_assessment', '谈话研判', 'textarea'], ['comprehensive_assessment', '综合研判', 'textarea'], ['seven_looks_score', '七看评价', 'number'], ['work_recognition_score', '工作认可度', 'number'], ['talk_score', '谈话研判评分', 'number'], ['comprehensive_score', '综合研判评分', 'number'], ['ranking', '排名', 'number'], ['adjustment_suggestion', '调整建议', 'textarea']
 ].map(([key, label, type = 'text']) => ({ key, label, type }))
+const recordUpdateSchema = {
+  type: 'object',
+  properties: {
+    recordId: { type: 'string', minLength: 1, description: '研判记录 UUID。' },
+    values: { type: 'object', properties: Object.fromEntries(fields.map(({ key }) => [key, {}])), minProperties: 1, additionalProperties: false },
+  },
+  required: ['recordId', 'values'],
+  additionalProperties: false,
+}
 const columns = [{ title: '姓名', dataIndex: 'name', width: 100 }, { title: '单位', dataIndex: 'department' }, { title: '职务', dataIndex: 'position' }, { title: '职务类别', key: 'category', width: 180 }, { title: '排名', dataIndex: 'ranking', width: 80 }, { title: '综合评分', key: 'score', width: 100 }, { title: '操作', key: 'action', width: 100 }]
 const categoryOptions = [['SECTION_CHIEF', '科室正职（含企业）'], ['SECTION_DEPUTY', '科室副职（含企业）'], ['INSTITUTION_2', '事业单位、群团组织、工作团队（二级）'], ['PRISON_WARDEN', '监区长'], ['INSTRUCTOR', '教导员'], ['DEPUTY_PRISON', '副区（狱政）'], ['DEPUTY_PRODUCTION', '副区（生产）'], ['DEPUTY_EDUCATION', '副区（教育）'], ['PRISON_TEAM', '监区工作团队']].map(([value, label]) => ({ value, label }))
 const fileOptions = computed(() => files.value.map(item => ({ value: item.id, label: `${item.version_date} · ${item.file_name}` }))); const selectedFile = computed(() => files.value.find(item => item.id === filters.file))
@@ -129,7 +138,7 @@ const registerUploadTools = () => {
       name: 'complete_openhrm_cadre_assessment_record_update',
       title: '保存干部研判修改',
       description: '保存指定干部研判记录的修改，并写入修改历史；这是会修改人事研判数据的操作。',
-      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 }, values: { type: 'object', additionalProperties: true } }, required: ['recordId', 'values'], additionalProperties: false },
+      inputSchema: recordUpdateSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       async execute(input) { if (!canManage.value) throw new Error('当前用户没有修改干部研判记录的权限'); const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); const allowed = new Set(fields.map(item => item.key)); const invalid = Object.keys(input.values).find(key => !allowed.has(key)); if (invalid) throw new Error(`不支持修改字段：${invalid}`); await openRecord(record); startEdit(); Object.assign(editForm, input.values); await saveRecord(); return { status: 'saved', recordId: detail.value.id, fields: Object.keys(input.values) } }
     },

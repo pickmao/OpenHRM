@@ -500,7 +500,7 @@ const departmentDraftSchema = {
     name: { type: 'string', minLength: 1, description: '部门名称' },
     code: { type: 'string', description: '可选部门编码' },
     unitType: { type: 'string', enum: ['BRANCH', 'DIVISION', 'OFFICE', 'DEPARTMENT', 'TEAM'], description: '部门类型' },
-    parentId: { type: ['integer', 'null'], minimum: 1, description: '上级部门 ID；根部门使用 null 或省略' },
+    parentId: { type: ['string', 'null'], minLength: 1, description: '上级部门 UUID；根部门使用 null 或省略' },
     sortOrder: { type: 'integer', minimum: 0, description: '排序值，默认 0' },
     isActive: { type: 'boolean', description: '是否启用，默认 true' }
   }, required: ['name', 'unitType'], additionalProperties: false
@@ -532,17 +532,17 @@ const registerWebMcpTools = () => {
     },
     {
       name: 'stage_openhrm_department_update', title: '配置部门修改',
-      description: '填写指定部门的修改内容，仅暂存于当前页面，不会保存。', inputSchema: { ...departmentDraftSchema, properties: { ...departmentDraftSchema.properties, departmentId: { type: 'integer', minimum: 1, description: '要修改的部门 ID' } }, required: ['departmentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
+      description: '填写指定部门的修改内容，仅暂存于当前页面，不会保存。', inputSchema: { ...departmentDraftSchema, properties: { ...departmentDraftSchema.properties, departmentId: { type: 'string', minLength: 1, description: '要修改的部门 UUID' } }, required: ['departmentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
       async execute(input) { const record = dataSource.value.find(item => item.id === input.departmentId); if (!record) throw new Error('未找到指定部门，请先读取部门列表'); isEdit.value = true; currentRecord.value = record; modalTitle.value = '编辑部门'; await applyDepartmentDraft(input); modalVisible.value = true; return { status: 'staged', departmentId: record.id, name: formData.name } }
     },
     {
       name: 'complete_openhrm_department_update', title: '保存部门修改',
-      description: '保存指定部门的名称、编码、类型、排序和启用状态；这是会修改组织架构的操作。', inputSchema: { ...departmentDraftSchema, properties: { ...departmentDraftSchema.properties, departmentId: { type: 'integer', minimum: 1, description: '要修改的部门 ID' } }, required: ['departmentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
+      description: '保存指定部门的名称、编码、类型、排序和启用状态；这是会修改组织架构的操作。', inputSchema: { ...departmentDraftSchema, properties: { ...departmentDraftSchema.properties, departmentId: { type: 'string', minLength: 1, description: '要修改的部门 UUID' } }, required: ['departmentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
       async execute(input) { const record = dataSource.value.find(item => item.id === input.departmentId); if (!record) throw new Error('未找到指定部门，请先读取部门列表'); isEdit.value = true; currentRecord.value = record; await applyDepartmentDraft(input); if (!formData.name || !formData.unit_type) throw new Error('部门名称和部门类型不能为空'); submitLoading.value = true; try { const updated = await updateDepartment(record.id, toDepartmentPayload()); await Promise.all([loadDepartmentList(), loadDepartmentTree()]); modalVisible.value = false; message.success('更新成功'); return { status: 'saved', department: { id: updated.id ?? record.id, name: updated.name ?? formData.name } } } finally { submitLoading.value = false } }
     },
     {
       name: 'complete_openhrm_department_deletion', title: '删除部门',
-      description: '删除指定部门及其子部门和成员关系；这是不可逆的组织数据删除操作。', inputSchema: { type: 'object', properties: { departmentId: { type: 'integer', minimum: 1 } }, required: ['departmentId'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      description: '删除指定部门及其子部门和成员关系；这是不可逆的组织数据删除操作。', inputSchema: { type: 'object', properties: { departmentId: { type: 'string', minLength: 1, description: '要删除的部门 UUID' } }, required: ['departmentId'], additionalProperties: false }, annotations: { readOnlyHint: false },
       async execute(input) { const record = dataSource.value.find(item => item.id === input.departmentId); if (!record) throw new Error('未找到指定部门，请先读取部门列表'); await deleteDepartment(record.id); await Promise.all([loadDepartmentList(), loadDepartmentTree()]); message.success('删除成功'); return { status: 'deleted', departmentId: record.id, name: record.name } }
     }
   ])
