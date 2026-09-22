@@ -49,13 +49,18 @@ INSTALLED_APPS = [
     # Apps
     "accounts",
     "orgs",
-    "cadres",
+    "cadres.apps.CadresConfig",
     "staffing",
     "risk_rules",
     "audit",
     "forms",
     "assessments",
     "leadership_assessments",
+    "rewards_punishments",
+    "anonymous_evaluations",
+    "inspections",
+    "cadre_recommendations",
+    "knowing_people.apps.KnowingPeopleConfig",
 ]
 
 MIDDLEWARE = [

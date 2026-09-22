@@ -3,6 +3,10 @@ from rest_framework import serializers
 from .models import DispatchBatch, DispatchRule, FormSubmission, FormTask, FormTemplate
 
 
+class ExtendDeadlineSerializer(serializers.Serializer):
+    deadline_at = serializers.DateTimeField()
+
+
 class FormTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormTemplate

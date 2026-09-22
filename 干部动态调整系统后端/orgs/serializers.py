@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import OrgUnit, Membership
+from .models import OrgUnit, Membership, UnitType
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -35,6 +35,16 @@ class OrgUnitDetailSerializer(serializers.ModelSerializer):
     members_count = serializers.SerializerMethodField()
     all_members_count = serializers.SerializerMethodField()
 
+    def validate_parent(self, parent):
+        seen = set()
+        ancestor = parent
+        while ancestor:
+            if ancestor.pk in seen or (self.instance and ancestor.pk == self.instance.pk):
+                raise serializers.ValidationError('上级单位不能是自己或下级单位')
+            seen.add(ancestor.pk)
+            ancestor = ancestor.parent
+        return parent
+
     class Meta:
         model = OrgUnit
         fields = [
@@ -69,7 +79,7 @@ class OrgUnitTreeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrgUnit
-        fields = ['id', 'name', 'code', 'unit_type', 'label', 'value', 'children', 'is_active', 'sort_order']
+        fields = ['id', 'name', 'code', 'unit_type', 'parent', 'label', 'value', 'children', 'is_active', 'sort_order']
 
     def get_children(self, obj):
         """递归获取子部门"""
@@ -142,3 +152,72 @@ class OrgUnitReorderSerializer(serializers.Serializer):
 class OrgUnitManagerSerializer(serializers.Serializer):
     """设置部门负责人序列化器"""
     user_id = serializers.UUIDField()
+
+
+class BranchDepartmentSerializer(serializers.ModelSerializer):
+    """支部下属部门"""
+
+    class Meta:
+        model = OrgUnit
+        fields = ['id', 'name', 'code', 'unit_type', 'is_active', 'sort_order']
+
+
+class BranchSerializer(serializers.ModelSerializer):
+    """支部及其下属部门"""
+    departments = serializers.SerializerMethodField()
+    department_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrgUnit
+        fields = [
+            'id', 'name', 'code', 'parent', 'sort_order', 'is_active',
+            'departments', 'department_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_code(self, value):
+        return value or None
+
+    def get_departments(self, obj):
+        children = list(obj.children.all())
+        children.sort(key=lambda item: (item.sort_order, item.name))
+        return BranchDepartmentSerializer(children, many=True).data
+
+    def get_department_count(self, obj):
+        return len(obj.children.all())
+
+    def create(self, validated_data):
+        validated_data['unit_type'] = UnitType.BRANCH
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop('unit_type', None)
+        return super().update(instance, validated_data)
+
+
+class AssignDepartmentsSerializer(serializers.Serializer):
+    department_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+
+
+class AssignableDepartmentSerializer(serializers.ModelSerializer):
+    branch_id = serializers.SerializerMethodField()
+    branch_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrgUnit
+        fields = [
+            'id', 'name', 'code', 'unit_type', 'is_active', 'sort_order',
+            'parent', 'branch_id', 'branch_name',
+        ]
+
+    def get_branch_id(self, obj):
+        parent = obj.parent
+        if parent and parent.unit_type == UnitType.BRANCH:
+            return parent.id
+        return None
+
+    def get_branch_name(self, obj):
+        parent = obj.parent
+        if parent and parent.unit_type == UnitType.BRANCH:
+            return parent.name
+        return None

@@ -46,6 +46,11 @@ urlpatterns = [
     path("api/forms/", include('forms.urls')),
     path("api/assessments/", include('assessments.urls')),
     path("api/leadership-assessments/", include('leadership_assessments.urls')),
+    path("api/rewards/", include('rewards_punishments.urls')),
+    path("api/evaluations/", include('anonymous_evaluations.urls')),
+    path("api/inspections/", include('inspections.urls')),
+    path("api/recommendations/", include('cadre_recommendations.urls')),
+    path("api/knowing-people/", include('knowing_people.urls')),
     # Swagger文档
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),

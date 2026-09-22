@@ -10,18 +10,20 @@ import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formsApi } from '@/api/forms'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
 const task = ref(null)
 let editor = null
+let unregisterWebMcpTools = () => {}
 const editorSize = () => ({ width: '100%', height: `${Math.max(window.innerHeight - 190, 680)}px` })
 const loadScript = src => new Promise((resolve, reject) => {
   if (window.DocsAPI) return resolve()
   const script = document.createElement('script'); script.src = src; script.onload = resolve; script.onerror = reject; document.head.appendChild(script)
 })
-onMounted(async () => {
+const load = async () => {
   try {
     task.value = await formsApi.getTask(route.params.id)
     const config = await formsApi.getOnlyOfficeViewConfig(route.params.id)
@@ -30,8 +32,18 @@ onMounted(async () => {
     await nextTick()
     editor = new window.DocsAPI.DocEditor('onlyoffice-viewer', { ...config, ...editorSize() })
   } catch (_) { message.error('无法加载填报结果') } finally { loading.value = false }
-})
-onBeforeUnmount(() => { if (editor?.destroyEditor) editor.destroyEditor() })
+}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'read_openhrm_onlyoffice_form_result', title: '读取当前表单填报结果',
+      description: '读取当前 OnlyOffice 只读填报结果任务的基本信息，不修改表单内容或任务状态。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true },
+      async execute() { if (!task.value) task.value = await formsApi.getTask(route.params.id); return { task: task.value && { id: task.value.id, templateName: task.value.template_name, batchName: task.value.batch_name, status: task.value.status, deadlineAt: task.value.deadline_at } } }
+    },
+  ])
+}
+onMounted(() => { registerWebMcpTools(); load() })
+onBeforeUnmount(() => { unregisterWebMcpTools(); if (editor?.destroyEditor) editor.destroyEditor() })
 </script>
 
 <style scoped>

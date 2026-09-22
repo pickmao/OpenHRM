@@ -60,7 +60,7 @@ const registerWebMcpTools = () => {
     {
       name: 'complete_openhrm_role_deletion', title: '删除角色',
       description: '永久删除指定角色；仅在确认该角色不再需要时使用。',
-      inputSchema: { type: 'object', properties: { roleId: { type: 'integer', minimum: 1, description: '要删除的角色 ID' } }, required: ['roleId'], additionalProperties: false },
+      inputSchema: { type: 'object', properties: { roleId: { type: 'string', minLength: 1, description: '要删除的角色 UUID' } }, required: ['roleId'], additionalProperties: false },
       annotations: { readOnlyHint: false },
       async execute(input) {
         const role = roles.value.find(item => item.id === input?.roleId)

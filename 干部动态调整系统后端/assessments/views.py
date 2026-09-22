@@ -5,7 +5,7 @@ from io import BytesIO
 import pandas as pd
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -18,6 +18,8 @@ from .permissions import HasAssessmentPermission
 from .serializers import (AssessmentFileListSerializer, AssessmentFileSerializer,
                           AssessmentRecordDetailSerializer, AssessmentRecordListSerializer,
                           AssessmentRecordSerializer)
+from cadres.models import PersonnelRoster
+from cadres.org_alignment import roster_department_by_names
 
 
 SHEET_CATEGORY_MAP = {
@@ -186,7 +188,11 @@ class AssessmentRecordViewSet(viewsets.ModelViewSet):
         if params.get('name'):
             queryset = queryset.filter(name__icontains=params['name'])
         if params.get('department'):
-            queryset = queryset.filter(department__icontains=params['department'])
+            dept = params['department']
+            roster_names = list(
+                PersonnelRoster.objects.filter(department__icontains=dept).values_list('name', flat=True)
+            )
+            queryset = queryset.filter(Q(department__icontains=dept) | Q(name__in=roster_names))
         if params.get('ranking_min'):
             queryset = queryset.filter(ranking__gte=params['ranking_min'])
         if params.get('ranking_max'):
@@ -199,6 +205,19 @@ class AssessmentRecordViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return AssessmentRecordDetailSerializer
         return AssessmentRecordSerializer
+
+    def get_serializer(self, *args, **kwargs):
+        serializer = super().get_serializer(*args, **kwargs)
+        instance = args[0] if args else kwargs.get('instance')
+        names = []
+        if instance is None:
+            pass
+        elif getattr(instance, '__iter__', None) and not isinstance(instance, (str, bytes, AssessmentRecord)):
+            names = [item.name for item in instance]
+        else:
+            names = [instance.name]
+        serializer.context['roster_departments'] = roster_department_by_names(names)
+        return serializer
 
     def perform_update(self, serializer):
         record_change(

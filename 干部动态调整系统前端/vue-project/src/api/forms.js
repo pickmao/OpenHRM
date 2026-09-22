@@ -1,6 +1,12 @@
 import request from '@/utils/request'
 
 export const formsApi = {
+  getDispatchOptions() {
+    return request.get('/forms/dispatch/options/')
+  },
+  extendDeadline(batchId, deadlineAt) {
+    return request.post(`/forms/dispatch/${batchId}/extend-deadline/`, { deadline_at: deadlineAt })
+  },
   getTemplates(params) {
     return request.get('/forms/templates/', { params })
   },

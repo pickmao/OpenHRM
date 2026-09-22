@@ -3,7 +3,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 
 
 User = get_user_model()
@@ -38,6 +38,14 @@ class LeadershipAssessmentFile(models.Model):
 
     def __str__(self):
         return f'{self.file_name} ({self.version_date})'
+
+    def delete(self, *args, **kwargs):
+        storage = self.source_file.storage if self.source_file else None
+        source_name = self.source_file.name if self.source_file else ''
+        result = super().delete(*args, **kwargs)
+        if storage and source_name:
+            transaction.on_commit(lambda: storage.delete(source_name))
+        return result
 
 
 class LeadershipAssessmentRecord(models.Model):

@@ -71,15 +71,15 @@ const registerWebMcpTools = () => {
       async execute(input) { status.value = input.status || ''; await loadTasks(); return { tasks: tasks.value.map(({ id, template_name, batch_name, status: taskStatus, deadline_at, template_has_source_file }) => ({ id, templateName: template_name, batchName: batch_name, status: taskStatus, deadlineAt: deadline_at, canEdit: template_has_source_file })) } }
     },
     {
-      name: 'start_openhrm_form_task_editing', title: '开始填写表单', description: '打开指定任务的 OnlyOffice 编辑页面，不会提交表单。', inputSchema: { type: 'object', properties: { taskId: { type: 'integer', minimum: 1 } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: true },
+      name: 'start_openhrm_form_task_editing', title: '开始填写表单', description: '打开指定任务的 OnlyOffice 编辑页面，不会提交表单。', inputSchema: { type: 'object', properties: { taskId: { type: 'string', minLength: 1, description: '填报任务 UUID。' } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: true },
       async execute(input) { const task = findTask(input.taskId); if (!task.template_has_source_file) throw new Error('该任务的原始 Excel 模板文件缺失，无法编辑'); await router.push({ name: 'FormOnlyOfficeTask', params: { id: task.id } }); return { status: 'ready', taskId: task.id } }
     },
     {
-      name: 'start_openhrm_form_task_result_view', title: '查看填报结果', description: '打开指定任务的只读填报结果页面，不会修改任务。', inputSchema: { type: 'object', properties: { taskId: { type: 'integer', minimum: 1 } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: true },
+      name: 'start_openhrm_form_task_result_view', title: '查看填报结果', description: '打开指定任务的只读填报结果页面，不会修改任务。', inputSchema: { type: 'object', properties: { taskId: { type: 'string', minLength: 1, description: '填报任务 UUID。' } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: true },
       async execute(input) { const task = findTask(input.taskId); await router.push({ name: 'FormOnlyOfficeTaskView', params: { id: task.id } }); return { status: 'ready', taskId: task.id } }
     },
     {
-      name: 'complete_openhrm_form_task_submission', title: '提交填报任务', description: '提交指定表单任务；OnlyOffice 中的内容应已保存，此操作会将任务状态变为已提交。', inputSchema: { type: 'object', properties: { taskId: { type: 'integer', minimum: 1 } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: false },
+      name: 'complete_openhrm_form_task_submission', title: '提交填报任务', description: '提交指定表单任务；OnlyOffice 中的内容应已保存，此操作会将任务状态变为已提交。', inputSchema: { type: 'object', properties: { taskId: { type: 'string', minLength: 1, description: '填报任务 UUID。' } }, required: ['taskId'], additionalProperties: false }, annotations: { readOnlyHint: false },
       async execute(input) { const task = findTask(input.taskId); if (!task.template_has_source_file) throw new Error('该任务的原始 Excel 模板文件缺失，无法提交'); await formsApi.submitTask(task.id); await loadTasks(); message.success('已提交填报'); return { status: 'submitted', taskId: task.id } }
     }
   ])

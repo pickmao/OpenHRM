@@ -6,6 +6,8 @@ from . import views
 app_name = 'forms'
 
 urlpatterns = [
+    path('dispatch/options/', views.DispatchOptionsView.as_view(), name='dispatch-options'),
+    path('dispatch/<uuid:batch_id>/extend-deadline/', views.DispatchExtendDeadlineView.as_view(), name='dispatch-extend-deadline'),
     path('templates/', views.FormTemplateListCreateView.as_view(), name='template-list'),
     path('templates/<uuid:template_id>/', views.FormTemplateDetailView.as_view(), name='template-detail'),
     path('dispatch/preview/', views.DispatchPreviewView.as_view(), name='dispatch-preview'),

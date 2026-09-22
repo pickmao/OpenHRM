@@ -38,13 +38,20 @@
               <a-select v-model:value="form.batchId" :loading="loadingBatches" placeholder="选择尚未关闭的填报批次" :options="batchOptions" />
               <div class="form-hint">追加后会沿用该批次的原截止时间；相同表格和填报人不会重复创建任务。</div>
             </a-form-item>
-            <a-form-item v-if="batchMode === 'new'" label="截止时间"><a-date-picker v-model:value="form.deadlineAt" show-time style="width:100%" /></a-form-item>
+            <a-form-item v-if="batchMode === 'new'" label="截止时间" required>
+              <a-date-picker v-model:value="form.deadlineAt" show-time style="width:100%" placeholder="设置填报截止时间" />
+              <div class="form-hint">下发后可在「填报任务管理」中手动延长截止时间。</div>
+            </a-form-item>
             <a-alert v-else-if="selectedBatch" type="info" show-icon :message="`当前批次：${selectedBatch.name}`" :description="`原截止时间：${new Date(selectedBatch.deadline_at).toLocaleString()}`" class="batch-info" />
             <a-form-item label="下发范围">
               <a-radio-group v-model:value="recipientMode">
                 <a-radio value="all">下发给所有启用用户</a-radio>
                 <a-radio value="selected">选择具体人员</a-radio>
+                <a-radio value="roles">按角色下发</a-radio>
               </a-radio-group>
+            </a-form-item>
+            <a-form-item v-if="recipientMode === 'roles'" label="接收角色">
+              <a-select v-model:value="form.roleCodes" mode="multiple" show-search option-filter-prop="label" placeholder="选择角色，系统自动去重并排除禁用账号" :options="roles.map(role => ({ value: role.code, label: role.name }))" />
             </a-form-item>
             <a-form-item v-if="recipientMode === 'selected'" label="填报人员">
               <a-select v-model:value="form.userIds" mode="multiple" show-search option-filter-prop="label" :loading="loadingUsers" placeholder="选择需要填写表格的人员">
@@ -72,12 +79,12 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
-import request from '@/utils/request'
 import { formsApi } from '@/api/forms'
 import { registerModelContextTools } from '@/utils/webmcp'
 
 const templates = ref([])
 const users = ref([])
+const roles = ref([])
 const batches = ref([])
 const loadingTemplates = ref(false)
 const loadingUsers = ref(false)
@@ -89,7 +96,7 @@ const previewItems = ref([])
 const recipientMode = ref('selected')
 const batchMode = ref('new')
 const selectedFile = ref(null)
-const form = reactive({ templateId: undefined, batchId: undefined, batchName: '', deadlineAt: null, userIds: [] })
+const form = reactive({ templateId: undefined, batchId: undefined, batchName: '', deadlineAt: null, userIds: [], roleCodes: [] })
 const upload = reactive({ name: '', code: '' })
 
 const previewColumns = [
@@ -113,7 +120,7 @@ const loadTemplates = async () => {
 }
 const loadUsers = async () => {
   loadingUsers.value = true
-  try { const result = await request.get('/admin/users/'); users.value = Array.isArray(result) ? result : result?.results || [] } catch (_) { users.value = [] } finally { loadingUsers.value = false }
+  try { const result = await formsApi.getDispatchOptions(); users.value = result.users; roles.value = result.roles } catch (_) { users.value = []; roles.value = []; message.error('下发人员和角色加载失败，请刷新重试') } finally { loadingUsers.value = false }
 }
 const loadBatches = async () => {
   loadingBatches.value = true
@@ -145,11 +152,12 @@ const payload = () => {
   if (batchMode.value === 'new' && (!form.batchName || !form.deadlineAt)) throw new Error('请填写新建批次名称和截止时间')
   if (batchMode.value === 'existing' && !form.batchId) throw new Error('请选择要追加的填报批次')
   if (recipientMode.value === 'selected' && !form.userIds.length) throw new Error('请至少选择一名填报人员')
+  if (recipientMode.value === 'roles' && !form.roleCodes.length) throw new Error('请至少选择一个接收角色')
   const result = {
     rules: [{
       template_id: form.templateId,
-      receiver_type: 'USER',
-      receiver_expr_json: recipientMode.value === 'all' ? { all_users: true } : { user_ids: form.userIds }
+      receiver_type: recipientMode.value === 'roles' ? 'ORG_ROLE' : 'USER',
+      receiver_expr_json: recipientMode.value === 'roles' ? { role_codes: form.roleCodes } : recipientMode.value === 'all' ? { all_users: true } : { user_ids: form.userIds }
     }]
   }
   if (batchMode.value === 'new') {
@@ -175,7 +183,7 @@ const publish = async () => {
   } catch (error) { message.error(error.response?.data?.detail || error.message || '下发失败') } finally { publishing.value = false }
 }
 
-const dispatchSchema = { type: 'object', properties: { templateId: { type: 'integer', minimum: 1 }, batchMode: { type: 'string', enum: ['new', 'existing'] }, batchName: { type: 'string' }, batchId: { type: 'integer', minimum: 1 }, deadlineAt: { type: 'string', description: '新批次截止时间，ISO 日期或本地日期时间字符串' }, recipientMode: { type: 'string', enum: ['selected', 'all'] }, userIds: { type: 'array', items: { type: 'integer', minimum: 1 }, uniqueItems: true } }, required: ['templateId', 'batchMode', 'recipientMode'], additionalProperties: false }
+const dispatchSchema = { type: 'object', properties: { templateId: { type: 'string', minLength: 1, description: '表单模板 UUID。' }, batchMode: { type: 'string', enum: ['new', 'existing'] }, batchName: { type: 'string' }, batchId: { type: 'string', minLength: 1, description: '下发批次 UUID。' }, deadlineAt: { type: 'string', description: '新批次截止时间，ISO 日期或本地日期时间字符串' }, recipientMode: { type: 'string', enum: ['selected', 'all'] }, userIds: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true, description: '接收用户 UUID 列表。' } }, required: ['templateId', 'batchMode', 'recipientMode'], additionalProperties: false }
 const stageDispatch = async input => {
   const template = templates.value.find(item => item.id === input.templateId); if (!template) throw new Error('未找到指定的可用模板，请先读取下发选项')
   if (input.batchMode === 'new' && (!input.batchName?.trim() || !input.deadlineAt)) throw new Error('新建批次必须提供批次名称和截止时间')

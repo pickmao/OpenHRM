@@ -7,6 +7,8 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
+from accounts.models import Role, User
+from accounts.permissions import HasPermissionCode
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -16,9 +18,9 @@ from .models import DispatchBatch, FormTask, FormTaskStatus, FormTemplate, OnlyO
 from .permissions import HasFormsPermission, user_has_permission
 from .serializers import (
     DispatchBatchSerializer, DraftSaveSerializer, FormSubmissionSerializer, FormTaskSerializer,
-    FormTemplateSerializer, ReturnTaskSerializer, TaskSubmitSerializer,
+    FormTemplateSerializer, ReturnTaskSerializer, TaskSubmitSerializer, ExtendDeadlineSerializer,
 )
-from .services import create_onlyoffice_document, preview_dispatch, publish_dispatch, return_task, save_submission, visible_tasks
+from .services import create_onlyoffice_document, preview_dispatch, publish_dispatch, return_task, save_submission, visible_tasks, extend_deadline
 from .dashboard_service import FormDashboardService
 
 
@@ -81,6 +83,28 @@ class DispatchPreviewView(APIView):
 
     def post(self, request):
         return Response(preview_dispatch(request.data))
+
+
+class DispatchOptionsView(APIView):
+    permission_classes = [IsAuthenticated, HasPermissionCode]
+    permission_code = 'forms:dispatch:manage'
+
+    def get(self, request):
+        return Response({
+            'roles': list(Role.objects.filter(is_active=True).values('code', 'name')),
+            'users': list(User.objects.filter(is_active=True).order_by('real_name', 'username').values('id', 'real_name', 'username')),
+        })
+
+
+class DispatchExtendDeadlineView(APIView):
+    permission_classes = [IsAuthenticated, HasPermissionCode]
+    permission_code = 'forms:dispatch:manage'
+
+    def post(self, request, batch_id):
+        serializer = ExtendDeadlineSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        batch = extend_deadline(batch_id, serializer.validated_data['deadline_at'], request.user, request)
+        return Response(DispatchBatchSerializer(batch).data)
 
 
 class DispatchPublishView(APIView):

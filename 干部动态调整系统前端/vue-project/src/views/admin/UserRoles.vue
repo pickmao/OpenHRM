@@ -9,7 +9,7 @@ const columns = [{ title: '账号', dataIndex: 'username' }, { title: '姓名', 
 const loadUsers = async () => { loading.value = true; try { const data = await getAdminUsers(keyword.value ? { keyword: keyword.value } : undefined); users.value = Array.isArray(data) ? data : data?.results || [] } catch { message.error('用户列表加载失败') } finally { loading.value = false } }
 const openEditor = async (user) => { current.value = user; try { const data = await getUserRoles(user.id); selectedRoleIds.value = data.roles.map(item => item.id); visible.value = true } catch { message.error('用户角色加载失败') } }
 const save = async () => { try { saving.value = true; await assignUserRoles(current.value.id, selectedRoleIds.value); message.success('角色已分配'); visible.value = false; loadUsers() } catch (error) { message.error(error.response?.data?.detail || '保存失败') } finally { saving.value = false } }
-const assignmentSchema = { type: 'object', properties: { userId: { type: 'integer', minimum: 1, description: '用户 ID' }, roleIds: { type: 'array', items: { type: 'integer', minimum: 1 }, uniqueItems: true, description: '要分配的角色 ID 列表' } }, required: ['userId', 'roleIds'], additionalProperties: false }
+const assignmentSchema = { type: 'object', properties: { userId: { type: 'string', minLength: 1, description: '用户 UUID' }, roleIds: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true, description: '要分配的角色 UUID 列表' } }, required: ['userId', 'roleIds'], additionalProperties: false }
 const stageAssignment = async input => {
   const user = users.value.find(item => item.id === input.userId)
   if (!user) throw new Error('未找到指定用户，请先读取用户列表')

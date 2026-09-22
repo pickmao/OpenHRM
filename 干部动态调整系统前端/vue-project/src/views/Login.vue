@@ -62,11 +62,12 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { onMounted, onUnmounted, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const router = useRouter()
 const route = useRoute()
@@ -121,6 +122,19 @@ const handleLogin = async () => {
   }
 }
 
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => {
+  unregisterWebMcpTools = registerModelContextTools([
+    {
+      name: 'complete_openhrm_login', title: '登录 OpenHRM',
+      description: '使用用户名和密码登录本机 OpenHRM；成功后跳转到首页或登录前请求的页面。',
+      inputSchema: { type: 'object', properties: { username: { type: 'string', minLength: 3 }, password: { type: 'string', minLength: 6 }, remember: { type: 'boolean', description: '是否记住用户名。' } }, required: ['username', 'password'], additionalProperties: false },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      async execute(input) { loginForm.username = input.username; loginForm.password = input.password; loginForm.remember = input.remember ?? false; loading.value = true; try { const result = await userStore.login({ username: input.username, password: input.password }); if (!result.success) throw new Error(result.message || '登录失败'); const redirect = route.query.redirect || '/'; await router.push(redirect); return { status: 'logged_in', redirect } } finally { loading.value = false } }
+    },
+  ])
+}
+
 // 如果勾选记住密码，从localStorage恢复
 if (loginForm.remember) {
   const savedUsername = localStorage.getItem('saved_username')
@@ -128,6 +142,8 @@ if (loginForm.remember) {
     loginForm.username = savedUsername
   }
 }
+onMounted(registerWebMcpTools)
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>

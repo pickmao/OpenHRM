@@ -5,7 +5,7 @@
       <a-space wrap>
         <a-select v-model:value="filters.file" allow-clear placeholder="选择研判期间" style="width: 340px" :options="fileOptions" @change="loadRecords" />
         <a-input v-model:value="filters.name" allow-clear placeholder="姓名" style="width: 150px" @pressEnter="search" />
-        <a-input v-model:value="filters.department" allow-clear placeholder="单位" style="width: 180px" @pressEnter="search" />
+        <a-input v-model:value="filters.department" allow-clear placeholder="当前部门或研判单位" style="width: 200px" @pressEnter="search" />
         <a-select v-model:value="filters.position_category" allow-clear placeholder="职务类别" style="width: 220px" :options="categoryOptions" @change="search" />
         <a-button type="primary" @click="search">查询</a-button>
         <a-button v-if="canManage" @click="uploadOpen = true">上传本期 Excel</a-button>
@@ -65,7 +65,7 @@ const recordUpdateSchema = {
   required: ['recordId', 'values'],
   additionalProperties: false,
 }
-const columns = [{ title: '姓名', dataIndex: 'name', width: 100 }, { title: '单位', dataIndex: 'department' }, { title: '职务', dataIndex: 'position' }, { title: '职务类别', key: 'category', width: 180 }, { title: '排名', dataIndex: 'ranking', width: 80 }, { title: '综合评分', key: 'score', width: 100 }, { title: '操作', key: 'action', width: 100 }]
+const columns = [{ title: '姓名', dataIndex: 'name', width: 100 }, { title: '当前部门', dataIndex: 'current_department', width: 140 }, { title: '研判单位', dataIndex: 'department' }, { title: '职务', dataIndex: 'position' }, { title: '职务类别', key: 'category', width: 180 }, { title: '排名', dataIndex: 'ranking', width: 80 }, { title: '综合评分', key: 'score', width: 100 }, { title: '操作', key: 'action', width: 100 }]
 const categoryOptions = [['SECTION_CHIEF', '科室正职（含企业）'], ['SECTION_DEPUTY', '科室副职（含企业）'], ['INSTITUTION_2', '事业单位、群团组织、工作团队（二级）'], ['PRISON_WARDEN', '监区长'], ['INSTRUCTOR', '教导员'], ['DEPUTY_PRISON', '副区（狱政）'], ['DEPUTY_PRODUCTION', '副区（生产）'], ['DEPUTY_EDUCATION', '副区（教育）'], ['PRISON_TEAM', '监区工作团队']].map(([value, label]) => ({ value, label }))
 const fileOptions = computed(() => files.value.map(item => ({ value: item.id, label: `${item.version_date} · ${item.file_name}` }))); const selectedFile = computed(() => files.value.find(item => item.id === filters.file))
 const loadFiles = async () => { const data = await assessmentApi.getFiles(); files.value = data.results || data }
@@ -114,7 +114,7 @@ const registerUploadTools = () => {
       name: 'list_openhrm_cadre_assessment_records',
       title: '读取干部研判记录',
       description: '按可选文件版本、姓名、单位和职务类别读取干部研判记录及文件版本，不修改数据。',
-      inputSchema: { type: 'object', properties: { fileId: { type: 'integer', minimum: 1 }, name: { type: 'string' }, department: { type: 'string' }, positionCategory: { type: 'string', enum: categoryOptions.map(item => item.value) } }, additionalProperties: false },
+      inputSchema: { type: 'object', properties: { fileId: { type: 'string', minLength: 1, description: '研判文件 UUID。' }, name: { type: 'string' }, department: { type: 'string' }, positionCategory: { type: 'string', enum: categoryOptions.map(item => item.value) } }, additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       async execute(input) { filters.file = input.fileId; filters.name = input.name?.trim() || ''; filters.department = input.department?.trim() || ''; filters.position_category = input.positionCategory; await Promise.all([loadFiles(), search()]); return { total: pagination.total, files: files.value.map(({ id, version_date, file_name }) => ({ id, versionDate: version_date, fileName: file_name })), records: records.value.map(({ id, name, department, position, position_category, ranking, comprehensive_score }) => ({ id, name, department, position, positionCategory: position_category, ranking, comprehensiveScore: comprehensive_score })) } }
     },
@@ -122,7 +122,7 @@ const registerUploadTools = () => {
       name: 'read_openhrm_cadre_assessment_record',
       title: '读取干部研判详情',
       description: '读取一条干部研判记录及其修改历史，不修改数据。',
-      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 } }, required: ['recordId'], additionalProperties: false },
+      inputSchema: { type: 'object', properties: { recordId: { type: 'string', minLength: 1, description: '研判记录 UUID。' } }, required: ['recordId'], additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       async execute(input) { const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); await openRecord(record); return { record: detail.value, history: history.value } }
     },
@@ -130,7 +130,7 @@ const registerUploadTools = () => {
       name: 'stage_openhrm_cadre_assessment_record_update',
       title: '配置干部研判修改',
       description: '在当前记录详情页暂存可编辑研判字段，不会保存到系统。',
-      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 }, values: { type: 'object', additionalProperties: true, description: '以字段名为键的修改值；字段必须来自记录详情的可编辑字段' } }, required: ['recordId', 'values'], additionalProperties: false },
+      inputSchema: recordUpdateSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       async execute(input) { if (!canManage.value) throw new Error('当前用户没有修改干部研判记录的权限'); const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); const allowed = new Set(fields.map(item => item.key)); const invalid = Object.keys(input.values).find(key => !allowed.has(key)); if (invalid) throw new Error(`不支持修改字段：${invalid}`); await openRecord(record); startEdit(); Object.assign(editForm, input.values); return { status: 'staged', recordId: detail.value.id, fields: Object.keys(input.values) } }
     },

@@ -1,6 +1,6 @@
 <template>
   <div class="org-structure">
-    <a-card title="组织架构" :bordered="false">
+    <a-card title="组织架构与支部归属" :bordered="false">
       <template #extra>
         <a-space>
           <a-button type="primary" @click="handleAddRoot">
@@ -9,6 +9,7 @@
             </template>
             新增根节点
           </a-button>
+          <a-button @click="goBranchManage">支部管理</a-button>
           <a-button @click="handleRefresh" :loading="loading">
             <template #icon>
               <SyncOutlined />
@@ -19,6 +20,7 @@
       </template>
 
       <!-- 组织架构树 -->
+      <a-alert type="info" show-icon message="可创建类型为“支部”的单位，并将部门的上级单位设为所属支部。填报进度将按该归属汇总。" style="margin-bottom: 16px" />
       <div class="org-tree-container">
         <a-tree
           v-if="treeData.length > 0"
@@ -120,8 +122,8 @@
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
       >
-        <a-form-item label="上级部门" name="parent" v-if="currentNode && !isEdit">
-          <a-input :value="currentNode.name" disabled />
+        <a-form-item label="上级单位/支部" name="parent">
+          <a-tree-select v-model:value="formData.parent" :tree-data="parentOptions" :field-names="{ label: 'name', value: 'id', children: 'children' }" allow-clear tree-default-expand-all placeholder="留空为根单位，可选择所属支部" />
         </a-form-item>
         <a-form-item label="部门名称" name="name">
           <a-input v-model:value="formData.name" placeholder="请输入部门名称" />
@@ -154,7 +156,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -177,6 +179,10 @@ import {
 import { registerModelContextTools } from '@/utils/webmcp'
 
 const router = useRouter()
+const parentOptions = computed(() => {
+  const withoutCurrent = nodes => nodes.filter(node => !isEdit.value || node.id !== currentNode.value?.id).map(node => ({ ...node, children: withoutCurrent(node.children || []) }))
+  return withoutCurrent(treeData.value)
+})
 
 // 响应式数据
 const treeData = ref([])
@@ -280,6 +286,10 @@ const goTransfer = () => {
   router.push({ path: '/allocation/plan', query: { fromDeptId: selectedNode.value.id } })
 }
 
+const goBranchManage = () => {
+  router.push('/org/branch')
+}
+
 // 新增根节点
 const handleAddRoot = () => {
   isEdit.value = false
@@ -306,6 +316,7 @@ const handleEdit = (node) => {
   currentNode.value = node
   modalTitle.value = '编辑部门'
   formData.name = node.name
+  formData.parent = node.parent || null
   formData.code = node.code || ''
   formData.unit_type = node.unit_type || 'DEPARTMENT'
   formData.sort_order = node.sort_order || 0
@@ -352,12 +363,7 @@ const handleModalOk = async () => {
     }
 
     // 处理 parent 字段
-    if (!isEdit.value && currentNode.value) {
-      // 新增子部门
-      data.parent = currentNode.value.id
-    } else if (!isEdit.value) {
-      // 新增根部门，不发送 parent 字段（让后端使用默认值 null）
-    }
+    data.parent = formData.parent || null
 
     console.log('提交数据:', data)
 
@@ -432,7 +438,7 @@ const registerWebMcpTools = () => {
   unregisterWebMcpTools = registerModelContextTools([
     {
       name: 'read_openhrm_organization_tree', title: '读取组织架构', description: '读取完整组织树；可选指定一个部门以读取其在岗成员，不修改数据。',
-      inputSchema: { type: 'object', properties: { departmentId: { type: 'integer', minimum: 1, description: '可选部门 ID' } }, additionalProperties: false }, annotations: { readOnlyHint: true },
+      inputSchema: { type: 'object', properties: { departmentId: { type: 'string', minLength: 1, description: '可选部门 UUID。' } }, additionalProperties: false }, annotations: { readOnlyHint: true },
       async execute(input) { await loadTreeData(); if (input.departmentId) { const node = findTreeNode(treeData.value, input.departmentId); if (!node) throw new Error('未找到指定部门'); await handleSelect([node.id], { node: { dataRef: node } }) } return { tree: treeData.value, selectedDepartment: selectedNode.value && { id: selectedNode.value.id, name: selectedNode.value.name }, members: members.value.map(({ id, position, is_manager, user_info }) => ({ id, username: user_info?.username, name: user_info?.real_name, position, isManager: is_manager })) } }
     },
     {
@@ -440,11 +446,11 @@ const registerWebMcpTools = () => {
       async execute(input) { handleAddRoot(); await applyStructureDraft(input); return { status: 'staged', type: 'root', name: formData.name } }
     },
     {
-      name: 'stage_openhrm_child_department_creation', title: '配置子部门', description: '填写指定父部门下的新子部门，仅暂存于当前页面，不会创建部门。', inputSchema: { ...structureDraftSchema, properties: { ...structureDraftSchema.properties, parentId: { type: 'integer', minimum: 1 } }, required: ['parentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
+      name: 'stage_openhrm_child_department_creation', title: '配置子部门', description: '填写指定父部门下的新子部门，仅暂存于当前页面，不会创建部门。', inputSchema: { ...structureDraftSchema, properties: { ...structureDraftSchema.properties, parentId: { type: 'string', minLength: 1, description: '上级部门 UUID。' } }, required: ['parentId', 'name', 'unitType'] }, annotations: { readOnlyHint: false },
       async execute(input) { const parent = findTreeNode(treeData.value, input.parentId); if (!parent) throw new Error('未找到指定父部门'); handleAddChild(parent); await applyStructureDraft(input); return { status: 'staged', type: 'child', parentId: parent.id, name: formData.name } }
     },
     {
-      name: 'start_openhrm_department_member_transfer', title: '开始部门人员调配', description: '打开指定部门的人员调配计划，仅开始配置，不会提交调配。', inputSchema: { type: 'object', properties: { departmentId: { type: 'integer', minimum: 1 } }, required: ['departmentId'], additionalProperties: false }, annotations: { readOnlyHint: true },
+      name: 'start_openhrm_department_member_transfer', title: '开始部门人员调配', description: '打开指定部门的人员调配计划，仅开始配置，不会提交调配。', inputSchema: { type: 'object', properties: { departmentId: { type: 'string', minLength: 1, description: '部门 UUID。' } }, required: ['departmentId'], additionalProperties: false }, annotations: { readOnlyHint: true },
       async execute(input) { const node = findTreeNode(treeData.value, input.departmentId); if (!node) throw new Error('未找到指定部门'); await router.push({ path: '/allocation/plan', query: { fromDeptId: node.id } }); return { status: 'ready', departmentId: node.id, route: '/allocation/plan' } }
     }
   ])

@@ -41,6 +41,7 @@ class TaskAuditAction(models.TextChoices):
     CLOSE = 'CLOSE', '关闭任务'
     REOPEN = 'REOPEN', '重新打开'
     DELETE = 'DELETE', '删除任务'
+    EXTEND_DEADLINE = 'EXTEND_DEADLINE', '延长截止时间'
 
 
 class FormTemplate(models.Model):

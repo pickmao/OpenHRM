@@ -36,7 +36,8 @@ class PersonnelRosterListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'serial_number', 'name', 'department', 'gender', 'gender_display',
             'age', 'political_status', 'political_status_display',
-            'position', 'police_rank', 'police_rank_display',
+            'position', 'position_category', 'position_rank',
+            'police_rank', 'police_rank_display',
             'police_title', 'police_title_display',
             'police_number', 'phone', 'education_level', 'highest_education'
         ]

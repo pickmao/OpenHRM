@@ -73,7 +73,7 @@ const registerUploadTools = () => {
       name: 'list_openhrm_leadership_assessment_records',
       title: '读取领导班子研判记录',
       description: '按可选文件版本和班子名称读取领导班子研判记录及文件版本，不修改数据。',
-      inputSchema: { type: 'object', properties: { fileId: { type: 'integer', minimum: 1 }, name: { type: 'string' } }, additionalProperties: false },
+      inputSchema: { type: 'object', properties: { fileId: { type: 'string', minLength: 1, description: '研判文件 UUID。' }, name: { type: 'string' } }, additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       async execute(input) { filters.file = input.fileId; filters.name = input.name?.trim() || ''; await Promise.all([loadFiles(), search()]); return { total: pagination.total, files: files.value.map(({ id, version_date, file_name }) => ({ id, versionDate: version_date, fileName: file_name })), records: records.value.map(({ id, name, leadership_count, vacancy_count, average_age, total_score, ranking }) => ({ id, name, leadershipCount: leadership_count, vacancyCount: vacancy_count, averageAge: average_age, totalScore: total_score, ranking })) } }
     },
@@ -81,7 +81,7 @@ const registerUploadTools = () => {
       name: 'read_openhrm_leadership_assessment_record',
       title: '读取领导班子研判详情',
       description: '读取一条领导班子研判记录及其修改历史，不修改数据。',
-      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 } }, required: ['recordId'], additionalProperties: false },
+      inputSchema: { type: 'object', properties: { recordId: { type: 'string', minLength: 1, description: '研判记录 UUID。' } }, required: ['recordId'], additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       async execute(input) { const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); await openRecord(record); return { record: detail.value, history: history.value } }
     },
@@ -89,7 +89,7 @@ const registerUploadTools = () => {
       name: 'stage_openhrm_leadership_assessment_record_update',
       title: '配置领导班子研判修改',
       description: '在当前记录详情页暂存可编辑研判字段，不会保存到系统。',
-      inputSchema: { type: 'object', properties: { recordId: { type: 'integer', minimum: 1 }, values: { type: 'object', additionalProperties: true, description: '以字段名为键的修改值；字段必须来自记录详情的可编辑字段' } }, required: ['recordId', 'values'], additionalProperties: false },
+      inputSchema: recordUpdateSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       async execute(input) { if (!canManage.value) throw new Error('当前用户没有修改领导班子研判记录的权限'); const record = records.value.find(item => item.id === input.recordId); if (!record) throw new Error('未找到指定记录，请先读取研判记录列表'); const allowed = new Set(fields.map(item => item.key)); const invalid = Object.keys(input.values).find(key => !allowed.has(key)); if (invalid) throw new Error(`不支持修改字段：${invalid}`); await openRecord(record); startEdit(); Object.assign(editForm, input.values); return { status: 'staged', recordId: detail.value.id, fields: Object.keys(input.values) } }
     },

@@ -4,7 +4,7 @@ from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 
@@ -20,7 +20,7 @@ from .serializers import (
 class PersonnelRosterViewSet(viewsets.ModelViewSet):
     """花名册视图集"""
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
         """获取查询集"""
@@ -51,6 +51,13 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
         if political_status:
             queryset = queryset.filter(political_status=political_status)
 
+        if self.request.query_params.get('leadership_scope') == 'middle':
+            # 附件8：中层领导含工作团队负责人；排除监狱领导班子。
+            queryset = queryset.filter(
+                Q(position_category__in=['领导职务', '内定领导职务', '监区工作团队正职', '监区工作团队副职'])
+                | Q(position__contains='团队') | Q(position__contains='分监区长')
+            ).exclude(department='监狱领导').exclude(position_rank__startswith='县处级')
+
         return queryset
 
     def get_serializer_class(self):
@@ -66,8 +73,18 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='upload-excel')
     def upload_excel(self, request):
         """
-        上传Excel文件并批量导入花名册数据
+        上传 Excel 并导入花名册。
+        默认 replace=true：清空原有花名册后整表覆盖写入。
+        传 replace=false 时追加导入（唯一冲突跳过）。
         """
+        from django.db import transaction
+
+        from .roster_import import (
+            build_column_map,
+            required_columns_present,
+            row_to_roster_data,
+        )
+
         if 'file' not in request.FILES:
             return Response(
                 {'error': '请上传文件'},
@@ -75,144 +92,125 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
             )
 
         file = request.FILES['file']
+        replace_raw = request.data.get('replace', 'true')
+        replace = str(replace_raw).strip().lower() in {'1', 'true', 'yes', 'on'}
 
         # 检查文件扩展名
-        if not file.name.endswith(('.xlsx', '.xls')):
+        if not file.name.lower().endswith(('.xlsx', '.xls')):
             return Response(
                 {'error': '只支持Excel文件格式 (.xlsx, .xls)'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            # 读取Excel文件
-            df = pd.read_excel(file)
+            # 读取Excel文件（.xls 优先 xlrd）
+            try:
+                df = pd.read_excel(file, engine='xlrd' if file.name.lower().endswith('.xls') else None)
+            except Exception:
+                file.seek(0)
+                df = pd.read_excel(file)
 
-            # 检查必需的列
-            required_columns = ['姓名*', '部门*', '性别*']
-            missing_columns = [col for col in required_columns if col not in df.columns]
+            column_map = build_column_map(df.columns)
+            missing_columns = required_columns_present(column_map)
             if missing_columns:
                 return Response(
                     {
                         'error': f'Excel文件缺少必需的列: {", ".join(missing_columns)}',
-                        'required_columns': required_columns
+                        'required_columns': ['姓名', '部门'],
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 数据统计
             total_rows = len(df)
             success_count = 0
             error_count = 0
             errors = []
-
-            # 批量创建数据
             roster_list = []
+            # 文件内去重，避免覆盖写入时唯一键冲突
+            seen_id_cards = set()
+            seen_police_numbers = set()
+
             for index, row in df.iterrows():
                 try:
-                    # 映射Excel列名到模型字段
-                    roster_data = {
-                        'serial_number': row.get('序号*', index + 1),
-                        'name': row.get('姓名*', ''),
-                        'department': row.get('部门*', ''),
-                        'gender': self._map_gender(row.get('性别*', '')),
-                        'age': row.get('年龄*', None) if pd.notna(row.get('年龄*', None)) else None,
-                        'birth_date': self._parse_date(row.get('出生年月*')),
-                        'ethnicity': row.get('民族*', ''),
-                        'native_place': row.get('籍贯*', ''),
-                        'household_registration': row.get('户籍所在地\n（未核对原件）', ''),
-                        'working_years': row.get('工龄', None) if pd.notna(row.get('工龄', None)) else None,
-                        'join_work_date': self._parse_date(row.get('参加工作时间*')),
-                        'join_prison_date': self._parse_date(row.get('参加监狱工作时间*')),
-                        'continuous_service_date': self._parse_date(row.get('连续工龄计算时间*')),
-                        'has_2years_grassroots': str(row.get('是否有2年基层工作经历', '')),
-                        'political_status': row.get('政治面貌*', ''),
-                        'join_party_date': self._parse_date(row.get('入党时间*')),
-                        'position': str(row.get('职务*', '')) if pd.notna(row.get('职务*', None)) else '',
-                        'promotion_category': str(row.get('晋升四高及以上序列分类', '')) if pd.notna(row.get('晋升四高及以上序列分类', None)) else '',
-                        'position_category': str(row.get('职务类别', '')) if pd.notna(row.get('职务类别', None)) else '',
-                        'current_position_years': str(row.get('任现职年限', '')) if pd.notna(row.get('任现职年限', None)) else '',
-                        'current_position_date': self._parse_date(row.get('任现职务时间')),
-                        'position_level': str(row.get('职务级别', '')) if pd.notna(row.get('职务级别', None)) else '',
-                        'position_rank': str(row.get('职务层次', '')) if pd.notna(row.get('职务层次', None)) else '',
-                        'same_level_leadership_years': str(row.get('任同级领导职务年限', '')) if pd.notna(row.get('任同级领导职务年限', None)) else '',
-                        'same_level_leadership_date': self._parse_date(row.get('任同级\n领导职务时间')),
-                        'same_level_rank_years': str(row.get('任同级领导职务层次时间年限', '')) if pd.notna(row.get('任同级领导职务层次时间年限', None)) else '',
-                        'same_level_rank_date': self._parse_date(row.get('任同级领导职务层次时间')),
-                        'current_rank_years': str(row.get('任现职级年限（即任现警员职级年限）*', '')) if pd.notna(row.get('任现职级年限（即任现警员职级年限）*', None)) else '',
-                        'current_rank_date': self._parse_date(row.get('任现职级时间（即任现警员职级时间）*')),
-                        'calculation_start_date': self._parse_date(row.get('量化计分起算时间')),
-                        'police_rank': str(row.get('现警员职级*', '')) if pd.notna(row.get('现警员职级*', None)) else '',
-                        'police_rank_start_date': self._parse_date(row.get('任现警员职级起算时间')),
-                        'first_set_rank': str(row.get('首套警员职级', '')) if pd.notna(row.get('首套警员职级', None)) else '',
-                        'first_set_rank_date': self._parse_date(row.get('首套警员职级起算时间')),
-                        'first_promote_rank': str(row.get('首晋警员职级', '')) if pd.notna(row.get('首晋警员职级', None)) else '',
-                        'first_promote_rank_date': self._parse_date(row.get('首晋警员职级起算时间')),
-                        'work_charge': str(row.get('分管工作', '')) if pd.notna(row.get('分管工作', None)) else '',
-                        'fulltime_education': str(row.get('全日制教育学历*', '')) if pd.notna(row.get('全日制教育学历*', None)) else '',
-                        'fulltime_school': str(row.get('毕业院校*', '')) if pd.notna(row.get('毕业院校*', None)) else '',
-                        'fulltime_major': str(row.get('专业*', '')) if pd.notna(row.get('专业*', None)) else '',
-                        'fulltime_degree': str(row.get('学位*', '')) if pd.notna(row.get('学位*', None)) else '',
-                        'fulltime_start_date': self._parse_date(row.get('入学时间')),
-                        'fulltime_graduate_date': self._parse_date(row.get('毕业时间')),
-                        'inservice_education': str(row.get('在职学历*', '')) if pd.notna(row.get('在职学历*', None)) else '',
-                        'inservice_school': str(row.get('毕业院校*.1', '')) if pd.notna(row.get('毕业院校*.1', None)) else '',
-                        'inservice_form': str(row.get('学习形式', '')) if pd.notna(row.get('学习形式', None)) else '',
-                        'inservice_major': str(row.get('专业*.1', '')) if pd.notna(row.get('专业*.1', None)) else '',
-                        'inservice_degree': str(row.get('学位*.1', '')) if pd.notna(row.get('学位*.1', None)) else '',
-                        'inservice_start_date': self._parse_date(row.get('入学时间.1')),
-                        'inservice_graduate_date': self._parse_date(row.get('毕业时间.1')),
-                        'police_title': str(row.get('警衔*（已更新至20250526）', '')) if pd.notna(row.get('警衔*（已更新至20250526）', None)) else '',
-                        'police_number': str(row.get('警号*', '')) if pd.notna(row.get('警号*', None)) else '',
-                        'profession_name': str(row.get('专业资格\n名称', '')) if pd.notna(row.get('专业资格\n名称', None)) else '',
-                        'profession_level': str(row.get('专业资格级别', '')) if pd.notna(row.get('专业资格级别', None)) else '',
-                        'technical_title': str(row.get('专业技术职务', '')) if pd.notna(row.get('专业技术职务', None)) else '',
-                        'counseling_cert_level': str(row.get('心理咨询证书级别', '')) if pd.notna(row.get('心理咨询证书级别', None)) else '',
-                        'english_level': str(row.get('英语专业', '')) if pd.notna(row.get('英语专业', None)) else '',
-                        'remark': str(row.get('备注', '')) if pd.notna(row.get('备注', None)) else '',
-                        'quarterly_remark': str(row.get('季度报表备注', '')) if pd.notna(row.get('季度报表备注', None)) else '',
-                        'dept_work_years': str(row.get('在本部门工作年限', '')) if pd.notna(row.get('在本部门工作年限', None)) else '',
-                        'dept_work_date': self._parse_date(row.get('本部门工作时间*')),
-                        'unit_work_years': str(row.get('在本单位年限', '')) if pd.notna(row.get('在本单位年限', None)) else '',
-                        'enter_unit_date': self._parse_date(row.get('进入本单位时间*')),
-                        'enter_unit_form': str(row.get('进入本单位形式', '')) if pd.notna(row.get('进入本单位形式', None)) else '',
-                        'identity_source': str(row.get('身份来源', '')) if pd.notna(row.get('身份来源', None)) else '',
-                        'military_experience': str(row.get('军转干/部队经历*', '')) if pd.notna(row.get('军转干/部队经历*', None)) else '',
-                        'highest_education': str(row.get('最高学历*', '')) if pd.notna(row.get('最高学历*', None)) else '',
-                        'highest_school': str(row.get('最高学历毕业院校*', '')) if pd.notna(row.get('最高学历毕业院校*', None)) else '',
-                        'education_level': str(row.get('学历*', '')) if pd.notna(row.get('学历*', None)) else '',
-                        'highest_major': str(row.get('最高学历专业*', '')) if pd.notna(row.get('最高学历专业*', None)) else '',
-                        'highest_degree': str(row.get('最高学位*', '')) if pd.notna(row.get('最高学位*', None)) else '',
-                        'major_category': str(row.get('最高学历专业类别', '')) if pd.notna(row.get('最高学历专业类别', None)) else '',
-                        'id_card': str(row.get('身份证号*', '')) if pd.notna(row.get('身份证号*', None)) else '',
-                        'id_card_inconsistent': bool(row.get('出生年月与身份证信息不一致', False)),
-                        'phone': str(row.get('电话*', '')) if pd.notna(row.get('电话*', None)) else '',
-                        'cert_level': str(row.get('证书级别', '')) if pd.notna(row.get('证书级别', None)) else '',
-                    }
+                    roster_data = row_to_roster_data(row, column_map, fallback_serial=index + 1)
+                    if not roster_data.get('name'):
+                        raise ValueError('姓名为空')
+                    if not roster_data.get('department'):
+                        raise ValueError('部门为空')
+                    if roster_data.get('gender') not in {'M', 'F', 'U'}:
+                        roster_data['gender'] = 'U'
 
-                    # 创建对象
+                    id_card = roster_data.get('id_card') or None
+                    police_number = roster_data.get('police_number') or None
+                    if id_card:
+                        if id_card in seen_id_cards:
+                            raise ValueError(f'文件内身份证号重复：{id_card}')
+                        seen_id_cards.add(id_card)
+                    if police_number:
+                        if police_number in seen_police_numbers:
+                            raise ValueError(f'文件内警号重复：{police_number}')
+                        seen_police_numbers.add(police_number)
+
+                    roster_data['id_card'] = id_card
+                    roster_data['police_number'] = police_number
                     roster = PersonnelRoster(**roster_data)
-                    roster.full_clean()  # 验证数据
+                    roster.full_clean(exclude=['created_by'])
                     roster_list.append(roster)
                     success_count += 1
-
                 except Exception as e:
                     error_count += 1
                     errors.append({
-                        'row': index + 2,  # Excel行号（包含表头）
-                        'name': row.get('姓名*', ''),
+                        'row': index + 2,
+                        'name': str(row.get(column_map.get('姓名', '姓名'), '') or ''),
                         'error': str(e)
                     })
 
-            # 批量插入数据
-            if roster_list:
-                PersonnelRoster.objects.bulk_create(roster_list, batch_size=100, ignore_conflicts=True)
+            deleted_count = 0
+            created_count = 0
+            if replace and not roster_list:
+                return Response({
+                    'error': '覆盖导入失败：文件中没有可写入的有效记录，已保留原有花名册。',
+                    'total': total_rows,
+                    'success_count': 0,
+                    'created_count': 0,
+                    'deleted_count': 0,
+                    'error_count': error_count,
+                    'errors': errors[:10],
+                }, status=status.HTTP_400_BAD_REQUEST)
 
+            with transaction.atomic():
+                if replace:
+                    deleted_count = PersonnelRoster.objects.count()
+                    PersonnelRoster.objects.all().delete()
+                    PersonnelRoster.objects.bulk_create(roster_list, batch_size=100)
+                    created_count = len(roster_list)
+                elif roster_list:
+                    before = PersonnelRoster.objects.count()
+                    PersonnelRoster.objects.bulk_create(roster_list, batch_size=100, ignore_conflicts=True)
+                    created_count = PersonnelRoster.objects.count() - before
+
+            from .org_alignment import sync_memberships_from_rosters
+            # bulk_create 不发 post_save，导入后按花名册当前部门对齐账号主部门。
+            sync_memberships_from_rosters(
+                PersonnelRoster.objects.all() if replace else roster_list,
+                actor=request.user,
+            )
+
+            mode_label = '覆盖导入' if replace else '追加导入'
             return Response({
-                'message': f'导入完成！成功: {success_count}条，失败: {error_count}条',
+                'message': (
+                    f'{mode_label}完成！删除原有 {deleted_count} 条，写入 {created_count} 条，'
+                    f'解析成功 {success_count} 条，失败 {error_count} 条'
+                    if replace else
+                    f'{mode_label}完成！新增 {created_count} 条，解析成功 {success_count} 条，失败 {error_count} 条'
+                ),
+                'mode': 'replace' if replace else 'append',
                 'total': total_rows,
                 'success_count': success_count,
+                'created_count': created_count,
+                'deleted_count': deleted_count,
                 'error_count': error_count,
-                'errors': errors[:10]  # 只返回前10个错误
+                'errors': errors[:10]
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
@@ -235,6 +233,33 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
             'departments': departments,
             'gender_stats': list(gender_stats),
         })
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        """下载花名册导入模板（新版：改进要求/新版花名册）"""
+        from pathlib import Path
+        from django.http import FileResponse
+
+        doc_dir = Path(__file__).resolve().parent.parent / '文档'
+        candidates = [
+            doc_dir / '花名册数据模版.xls',
+            doc_dir / '花名册数据模版.xlsx',
+        ]
+        template_path = next((path for path in candidates if path.exists()), None)
+        if not template_path:
+            return Response({'error': '模板文件不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        content_types = {
+            '.xls': 'application/vnd.ms-excel',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }
+        suffix = template_path.suffix.lower()
+        return FileResponse(
+            template_path.open('rb'),
+            as_attachment=True,
+            filename=f'花名册数据模版{suffix}',
+            content_type=content_types.get(suffix, 'application/octet-stream'),
+        )
 
     def _map_gender(self, value):
         """映射性别"""

@@ -6,11 +6,16 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { assessmentApi } from '@/api/assessments'
+import { registerModelContextTools } from '@/utils/webmcp'
 const statistics = ref(null)
 const categories = computed(() => Object.entries(statistics.value?.category_stats || {}).map(([name, count]) => ({ name, count })))
 const columns = [{ title: '职务类别', dataIndex: 'name' }, { title: '人数', dataIndex: 'count', width: 180 }]
-onMounted(async () => { statistics.value = await assessmentApi.getStatistics() })
+const loadStatistics = async () => { statistics.value = await assessmentApi.getStatistics() }
+let unregisterWebMcpTools = () => {}
+const registerWebMcpTools = () => { unregisterWebMcpTools = registerModelContextTools([{ name: 'read_openhrm_cadre_assessment_analysis', title: '读取干部研判分析', description: '读取当前有效干部研判版本的汇总统计与职务类别分布，不修改记录。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, async execute() { await loadStatistics(); return { statistics: statistics.value, categories: categories.value } } }]) }
+onMounted(() => { registerWebMcpTools(); loadStatistics() })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 <style scoped>.page-shell { padding: 8px 0; }.distribution { margin-top: 16px; }</style>

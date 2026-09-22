@@ -5,8 +5,17 @@ from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
     """扩展用户模型"""
+    class AccountStatus(models.TextChoices):
+        PENDING_ACTIVATION = 'PENDING_ACTIVATION', '待激活'
+        ACTIVE = 'ACTIVE', '正常'
+        DISABLED = 'DISABLED', '已禁用'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     real_name = models.CharField('真实姓名', max_length=50)
+    account_status = models.CharField(
+        '账号状态', max_length=32, choices=AccountStatus.choices,
+        default=AccountStatus.ACTIVE,
+    )
     phone = models.CharField('手机号', max_length=20, blank=True, null=True)
     last_login_ip = models.GenericIPAddressField('最后登录IP', null=True, blank=True)
     profile_cadre = models.OneToOneField(

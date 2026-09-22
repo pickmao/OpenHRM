@@ -76,6 +76,8 @@ class MembershipTransferView(APIView):
                         effective_from=effective_date,
                         created_by=request.user,
                     )
+                    from cadres.org_alignment import sync_roster_department_for_user
+                    sync_roster_department_for_user(membership.user, target.name)
                     AuditLog.objects.create(
                         actor=request.user,
                         action=AuditAction.UPDATE_ORG,

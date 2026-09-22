@@ -46,7 +46,7 @@ const registerWebMcpTools = () => {
       name: 'complete_openhrm_role_permissions_update', title: '保存角色权限',
       description: '将给定权限列表保存到当前角色；这是会修改角色授权的操作。',
       inputSchema: permissionSchema, annotations: { readOnlyHint: false },
-      async execute(input) { validatePermissions(input.permissions); saving.value = true; try { await updateRolePermissions(route.params.id, input.permissions); selected.value = [...input.permissions]; message.success('权限配置已保存'); return { status: 'saved', roleId: Number(route.params.id), permissionCount: selected.value.length } } finally { saving.value = false } }
+      async execute(input) { validatePermissions(input.permissions); saving.value = true; try { await updateRolePermissions(route.params.id, input.permissions); selected.value = [...input.permissions]; message.success('权限配置已保存'); return { status: 'saved', roleId: String(route.params.id), permissionCount: selected.value.length } } finally { saving.value = false } }
     }
   ])
 }

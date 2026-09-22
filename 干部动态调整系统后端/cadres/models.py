@@ -177,17 +177,17 @@ class PersonnelRoster(models.Model):
     continuous_service_date = models.DateField('连续工龄计算时间', null=True, blank=True)
     has_2years_grassroots = models.CharField('是否有2年基层工作经历', max_length=10, blank=True)
 
-    # 政治信息
-    political_status = models.CharField('政治面貌', max_length=20, choices=PoliticalStatus.choices, blank=True)
+    # 政治信息（新版模板按文本存储）
+    political_status = models.CharField('政治面貌', max_length=50, blank=True)
     join_party_date = models.DateField('入党时间', null=True, blank=True)
 
     # 职务信息
     position = models.CharField('职务', max_length=100, blank=True)
     promotion_category = models.CharField('晋升四高及以上序列分类', max_length=50, blank=True)
     position_category = models.CharField('职务类别', max_length=50, blank=True)
-    current_position_years = models.CharField('任现职年限', max_length=20, blank=True)
-    current_position_date = models.DateField('任现职务时间', null=True, blank=True)
-    position_level = models.CharField('职务级别', max_length=50, blank=True)
+    current_position_years = models.CharField('任职年限', max_length=20, blank=True)
+    current_position_date = models.DateField('任现职时间', null=True, blank=True)
+    position_level = models.CharField('级别', max_length=50, blank=True)
     position_rank = models.CharField('职务层次', max_length=50, blank=True)
 
     # 领导职务信息
@@ -196,13 +196,13 @@ class PersonnelRoster(models.Model):
     same_level_rank_years = models.CharField('任同级领导职务层次时间年限', max_length=20, blank=True)
     same_level_rank_date = models.DateField('任同级领导职务层次时间', null=True, blank=True)
 
-    # 职级信息
-    current_rank_years = models.CharField('任现职级年限', max_length=20, blank=True)
-    current_rank_date = models.DateField('任现职级时间', null=True, blank=True)
+    # 职级信息（新版模板：任级年限 / 任级时间）
+    current_rank_years = models.CharField('任级年限', max_length=20, blank=True)
+    current_rank_date = models.DateField('任级时间', null=True, blank=True)
     calculation_start_date = models.DateField('量化计分起算时间', null=True, blank=True)
 
     # 警员职级信息
-    police_rank = models.CharField('现警员职级', max_length=20, choices=JobLevel.choices, blank=True)
+    police_rank = models.CharField('现警员职级', max_length=50, blank=True)
     police_rank_start_date = models.DateField('任现警员职级起算时间', null=True, blank=True)
     first_set_rank = models.CharField('首套警员职级', max_length=20, blank=True)
     first_set_rank_date = models.DateField('首套警员职级起算时间', null=True, blank=True)
@@ -229,8 +229,8 @@ class PersonnelRoster(models.Model):
     inservice_start_date = models.DateField('在职入学时间', null=True, blank=True)
     inservice_graduate_date = models.DateField('在职毕业时间', null=True, blank=True)
 
-    # 警衔警号
-    police_title = models.CharField('警衔', max_length=20, choices=PoliceRank.choices, blank=True)
+    # 警衔警号（新版模板自由文本，不做枚举限制）
+    police_title = models.CharField('警衔', max_length=50, blank=True)
     police_number = models.CharField('警号', max_length=20, unique=True, null=True, blank=True)
 
     # 专业资格
@@ -239,6 +239,9 @@ class PersonnelRoster(models.Model):
     technical_title = models.CharField('专业技术职务', max_length=100, blank=True)
     counseling_cert_level = models.CharField('心理咨询证书级别', max_length=50, blank=True)
     english_level = models.CharField('英语专业', max_length=50, blank=True)
+
+    # 新版：年度考核列（2010-2016）
+    annual_assessments = models.JSONField('年度考核', default=dict, blank=True)
 
     # 备注
     remark = models.TextField('备注', blank=True)
@@ -249,8 +252,12 @@ class PersonnelRoster(models.Model):
     dept_work_date = models.DateField('本部门工作时间', null=True, blank=True)
     unit_work_years = models.CharField('在本单位年限', max_length=20, blank=True)
     enter_unit_date = models.DateField('进入本单位时间', null=True, blank=True)
-    enter_unit_form = models.CharField('进入本单位形式', max_length=50, blank=True)
+    enter_unit_form = models.CharField('进入单位形式', max_length=50, blank=True)
     identity_source = models.CharField('身份来源', max_length=50, blank=True)
+
+    # 新版：干事信息
+    is_clerk = models.CharField('是否干事', max_length=50, blank=True)
+    clerk_date = models.DateField('任干事时间', null=True, blank=True)
 
     # 军转干/部队经历
     military_experience = models.CharField('军转干/部队经历', max_length=100, blank=True)

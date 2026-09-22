@@ -48,7 +48,7 @@ def resolve_recipients(rule):
             users = User.objects.filter(is_active=True)
         else:
             users = User.objects.filter(id__in=ids, is_active=True)
-        return [(ReceiverType.USER, user, None, '') for user in users]
+        return [(ReceiverType.USER, user, _primary_unit(user), '') for user in users]
 
     if receiver_type == ReceiverType.ORG_UNIT:
         ids = expr.get('org_unit_ids') or expr.get('ids') or []
@@ -67,8 +67,33 @@ def resolve_recipients(rule):
 
 
 def _primary_unit(user):
-    membership = Membership.objects.filter(user=user, effective_to__isnull=True).order_by('-is_primary').select_related('unit').first()
-    return membership.unit if membership else None
+    from cadres.org_alignment import current_org_unit_for_user
+    return current_org_unit_for_user(user)
+
+
+@transaction.atomic
+def extend_deadline(batch_id, deadline_at, operator, request=None):
+    from django.shortcuts import get_object_or_404
+    batch = get_object_or_404(DispatchBatch.objects.select_for_update(), id=batch_id)
+    if batch.status == DispatchBatchStatus.CLOSED:
+        raise ValidationError({'detail': '已关闭批次不能延长截止时间'})
+    if deadline_at <= batch.deadline_at or deadline_at <= timezone.now():
+        raise ValidationError({'detail': '新截止时间必须晚于原截止时间和当前时间'})
+    for task in batch.tasks.select_for_update().exclude(status=FormTaskStatus.CLOSED):
+        # 保留可能已经单独设置得更晚的任务截止时间。
+        if task.deadline_at >= deadline_at:
+            continue
+        before = {'deadline_at': task.deadline_at.isoformat(), 'status': task.status}
+        task.deadline_at = deadline_at
+        if task.status == FormTaskStatus.OVERDUE:
+            task.status = FormTaskStatus.PENDING
+        task.save(update_fields=['deadline_at', 'status', 'updated_at'])
+        add_audit(task, TaskAuditAction.EXTEND_DEADLINE, operator, before=before,
+                  after={'deadline_at': deadline_at.isoformat(), 'status': task.status}, request=request)
+    batch.deadline_at = deadline_at
+    batch.save(update_fields=['deadline_at', 'updated_at'])
+    batch.refresh_stats()
+    return batch
 
 
 @transaction.atomic

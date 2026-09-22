@@ -62,9 +62,11 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { registerModelContextTools } from '@/utils/webmcp'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -100,6 +102,10 @@ const handleLogout = async () => {
     // 用户取消操作
   }
 }
+
+let unregisterWebMcpTools = () => {}
+onMounted(() => { unregisterWebMcpTools = registerModelContextTools([{ name: 'read_openhrm_home_session', title: '读取首页会话信息', description: '读取当前登录账号的用户名、角色和权限数量，不返回手机号或登录 IP。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, async execute() { return { username: userStore.userInfo?.username, role: userStore.userInfo?.role, permissionCount: userStore.permissions.length } } }]) })
+onUnmounted(() => unregisterWebMcpTools())
 </script>
 
 <style scoped>

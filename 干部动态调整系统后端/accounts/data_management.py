@@ -24,7 +24,13 @@ def init_roles_and_permissions():
             'audit:view',
             'forms:template:manage', 'forms:dispatch:manage',
             'forms:task:view', 'forms:task:submit', 'forms:task:manage'
-            , 'orgs:membership:transfer'
+            , 'orgs:membership:transfer', 'rewards:view', 'rewards:manage',
+            'anonymous_evaluations:campaign:manage', 'anonymous_evaluations:task:view',
+            'anonymous_evaluations:task:submit', 'anonymous_evaluations:result:view',
+            'cadre_recommendations:campaign:manage', 'cadre_recommendations:task:view',
+            'cadre_recommendations:task:submit', 'cadre_recommendations:result:view',
+            'knowing_people:campaign:manage', 'knowing_people:task:view',
+            'knowing_people:task:submit', 'knowing_people:result:view'
         ],
         'POLITICAL_OFFICE_ADMIN': [
             'accounts:role:view', 'accounts:role:create', 'accounts:role:edit',
@@ -38,7 +44,13 @@ def init_roles_and_permissions():
             'audit:view',
             'forms:template:manage', 'forms:dispatch:manage',
             'forms:task:view', 'forms:task:submit', 'forms:task:manage'
-            , 'orgs:membership:transfer'
+            , 'orgs:membership:transfer', 'rewards:view', 'rewards:manage',
+            'anonymous_evaluations:campaign:manage', 'anonymous_evaluations:task:view',
+            'anonymous_evaluations:task:submit', 'anonymous_evaluations:result:view',
+            'cadre_recommendations:campaign:manage', 'cadre_recommendations:task:view',
+            'cadre_recommendations:task:submit', 'cadre_recommendations:result:view',
+            'knowing_people:campaign:manage', 'knowing_people:task:view',
+            'knowing_people:task:submit', 'knowing_people:result:view'
         ],
         'DEPT_MANAGER': [
             'cadres:view',
@@ -46,7 +58,10 @@ def init_roles_and_permissions():
             'staffing:plan:create',
             'risk:view',
             'audit:view',
-            'forms:task:view', 'forms:task:submit'
+            'forms:task:view', 'forms:task:submit',
+            'anonymous_evaluations:task:view', 'anonymous_evaluations:task:submit',
+            'cadre_recommendations:task:view', 'cadre_recommendations:task:submit',
+            'knowing_people:task:view', 'knowing_people:task:submit'
             , 'orgs:membership:transfer'
         ],
         'ANALYST': [
@@ -54,12 +69,19 @@ def init_roles_and_permissions():
             'orgs:view',
             'analytics:view',
             'risk:view',
-            'audit:view'
+            'audit:view',
+            'rewards:view',
+            'anonymous_evaluations:result:view',
+            'cadre_recommendations:result:view',
+            'knowing_people:result:view'
         ],
         'CADRE_SELF': [
             'cadres:view_self',
             'audit:view_self',
-            'forms:task:view', 'forms:task:submit'
+            'forms:task:view', 'forms:task:submit',
+            'anonymous_evaluations:task:view', 'anonymous_evaluations:task:submit',
+            'cadre_recommendations:task:view', 'cadre_recommendations:task:submit',
+            'knowing_people:task:view', 'knowing_people:task:submit'
         ]
     }
 
