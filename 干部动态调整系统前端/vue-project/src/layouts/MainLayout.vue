@@ -70,13 +70,14 @@
           <a-menu-item v-if="canViewRecommendationStats" key="recommend-stats">推荐结果统计</a-menu-item>
         </a-sub-menu>
 
-        <a-sub-menu key="assessment" v-if="canViewAssessments">
+        <a-sub-menu key="assessment" v-if="canViewAssessments || canViewOverallReview">
           <template #icon><FileTextOutlined /></template>
           <template #title>分析研判</template>
-          <a-menu-item key="assessment-records">中层干部研判</a-menu-item>
-          <a-menu-item key="assessment-analysis">干部研判分析</a-menu-item>
-          <a-menu-item key="leadership-records">领导班子研判</a-menu-item>
-          <a-menu-item key="leadership-analysis">班子研判分析</a-menu-item>
+          <a-menu-item v-if="canViewAssessments" key="assessment-records">中层干部研判</a-menu-item>
+          <a-menu-item v-if="canViewAssessments" key="assessment-analysis">干部研判分析</a-menu-item>
+          <a-menu-item v-if="canViewOverallReview" key="overall-review">员工整体评价</a-menu-item>
+          <a-menu-item v-if="canViewAssessments" key="leadership-records">领导班子研判</a-menu-item>
+          <a-menu-item v-if="canViewAssessments" key="leadership-analysis">班子研判分析</a-menu-item>
         </a-sub-menu>
 
         <a-sub-menu key="rewards" v-if="canViewRewards">
@@ -194,6 +195,7 @@ const routeMenuMap = {
   '/dashboard': { key: 'dashboard', open: [] },
   '/': { key: 'dashboard', open: [] },
   '/cadre/roster': { key: 'cadre-roster', open: ['cadre'] },
+  '/cadre/overall-review': { key: 'overall-review', open: ['assessment'] },
   '/knowing-people/dispatch': { key: 'knowing-dispatch', open: ['knowing-people'] },
   '/knowing-people/tasks': { key: 'knowing-tasks', open: ['knowing-people'] },
   '/knowing-people/progress': { key: 'knowing-progress', open: ['knowing-people'] },
@@ -243,6 +245,7 @@ const pageNameMap = {
   'recommend-stats': '推荐结果统计',
   'assessment-records': '中层干部研判',
   'assessment-analysis': '干部研判分析',
+  'overall-review': '员工整体评价',
   'leadership-records': '领导班子研判',
   'leadership-analysis': '班子研判分析',
   'reward-summary': '个人及集体奖励汇总',
@@ -306,6 +309,7 @@ const canViewAssessments = computed(() => {
   ]
   return userStore.userInfo?.is_superuser || permissions.some(permission => userStore.hasPermission?.(permission))
 })
+const canViewOverallReview = computed(() => userStore.userInfo?.is_superuser || userStore.hasPermission?.('cadres:overall_review:view'))
 const canFillKnowingPeople = computed(() => userStore.hasPermission?.('knowing_people:task:view') || userStore.hasPermission?.('knowing_people:task:submit') || userStore.userInfo?.is_superuser)
 const canManageKnowingPeople = computed(() => userStore.hasPermission?.('knowing_people:campaign:manage') || userStore.userInfo?.is_superuser)
 const canViewKnowingProgress = computed(() => userStore.hasPermission?.('knowing_people:result:view') || userStore.hasPermission?.('knowing_people:campaign:manage') || userStore.userInfo?.is_superuser)
@@ -331,6 +335,7 @@ const routeMap = {
   'recommend-stats': '/recommendations/stats',
   'assessment-records': '/assessments/records',
   'assessment-analysis': '/assessments/analysis',
+  'overall-review': '/cadre/overall-review',
   'leadership-records': '/leadership-assessments/records',
   'leadership-analysis': '/leadership-assessments/analysis',
   'reward-summary': '/rewards/summary',

@@ -23,6 +23,8 @@ PERMISSION_CATALOG = {
     '分析研判': [
         ('assessments:view', '查看干部与领导班子研判'),
         ('assessments:manage', '上传和维护研判数据'),
+        ('cadres:overall_review:view', '跨栏目查看员工整体评价资料'),
+        ('cadres:overall_review:generate', '将员工资料发送至Qwen并生成评价草稿'),
     ],
     '奖励汇总': [
         ('rewards:view', '查看个人及集体奖励汇总'),

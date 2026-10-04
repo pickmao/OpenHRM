@@ -660,14 +660,13 @@ const downloadTemplate = async () => {
     })
     const blob = response instanceof Blob
       ? response
-      : new Blob([response], { type: 'application/vnd.ms-excel' })
-    // 后端新版模板为 .xls（来自 改进要求/新版花名册）
-    saveBlob(blob, '花名册数据模版.xls')
+      : new Blob([response], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    saveBlob(blob, '花名册数据模版.xlsx')
     message.success('已开始下载最新花名册模板')
   } catch (error) {
     const link = document.createElement('a')
-    link.href = `${import.meta.env.BASE_URL}roster-template.xls`
-    link.download = '花名册数据模版.xls'
+    link.href = `${import.meta.env.BASE_URL}roster-template.xlsx`
+    link.download = '花名册数据模版.xlsx'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

@@ -7,6 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
 
 from accounts.models import ScopeType
 from accounts.permissions import HasPermissionCode
@@ -90,3 +91,42 @@ class MembershipTransferView(APIView):
                 result.append({'user_id': str(user_id), 'success': False, 'error': str(exc)})
         success = sum(item['success'] for item in result)
         return Response({'success': success, 'failed': len(result) - success, 'results': result})
+
+
+class MembershipTransferHistoryView(APIView):
+    """Read actual transfer audits with the same department scope as transfers."""
+
+    permission_classes = [IsAuthenticated, HasPermissionCode]
+    permission_code = 'orgs:membership:transfer'
+
+    def get(self, request):
+        records = AuditLog.objects.filter(
+            action=AuditAction.UPDATE_ORG, target_type='Membership',
+            context__has_key='from_dept',
+        ).select_related('actor').order_by('-created_at', '-id')
+        allowed = MembershipTransferView()._allowed_unit_ids(request.user)
+        if allowed is not None:
+            ids = [str(value) for value in allowed]
+            records = records.filter(context__from_dept__in=ids, context__to_dept__in=ids)
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        page = paginator.paginate_queryset(records, request, view=self)
+        memberships = {str(item.id): item for item in Membership.objects.filter(
+            id__in=[item.target_id for item in page if item.target_id],
+        ).select_related('user')}
+        # Looking names up in a dictionary also tolerates legacy audit values.
+        units = {str(unit.id): unit.name for unit in OrgUnit.objects.all()}
+        result = []
+        for record in page:
+            membership = memberships.get(str(record.target_id))
+            user = membership.user if membership else None
+            result.append({
+                'id': str(record.id), 'created_at': record.created_at,
+                'person_name': (user.real_name or user.username) if user else '人员关系已删除',
+                'from_department': units.get(record.context.get('from_dept'), '原部门已删除'),
+                'to_department': units.get(record.context.get('to_dept'), '目标部门已删除'),
+                'effective_date': record.context.get('effective_date') or (membership.effective_from if membership else None),
+                'reason': record.context.get('reason', ''),
+                'operator_name': (record.actor.real_name or record.actor.username) if record.actor else '未知',
+            })
+        return paginator.get_paginated_response(result)

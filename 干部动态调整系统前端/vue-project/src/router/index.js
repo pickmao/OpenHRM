@@ -30,6 +30,12 @@ const routes = [
         meta: { requiresAuth: true, title: '花名册管理', menuKey: 'cadre-roster' }
       },
       {
+        path: 'cadre/overall-review',
+        name: 'OverallReview',
+        component: () => import('@/views/OverallReview.vue'),
+        meta: { requiresAuth: true, title: '员工整体评价', menuKey: 'overall-review' }
+      },
+      {
         path: 'knowing-people/dispatch',
         name: 'KnowingPeopleDispatch',
         component: () => import('@/views/knowing-people/Dispatch.vue'),

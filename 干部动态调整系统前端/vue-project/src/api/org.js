@@ -1,5 +1,9 @@
 import request from '@/utils/request'
 
+export function getTransferHistory(params) {
+  return request({ url: '/org/memberships/transfer-history/', method: 'get', params })
+}
+
 /**
  * 组织架构管理 API
  */

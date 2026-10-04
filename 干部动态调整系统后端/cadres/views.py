@@ -236,29 +236,19 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='download-template')
     def download_template(self, request):
-        """下载花名册导入模板（新版：改进要求/新版花名册）"""
+        """下载只包含表头的花名册导入模板。"""
         from pathlib import Path
         from django.http import FileResponse
 
-        doc_dir = Path(__file__).resolve().parent.parent / '文档'
-        candidates = [
-            doc_dir / '花名册数据模版.xls',
-            doc_dir / '花名册数据模版.xlsx',
-        ]
-        template_path = next((path for path in candidates if path.exists()), None)
-        if not template_path:
+        template_path = Path(__file__).resolve().parent / 'templates' / 'roster-template.xlsx'
+        if not template_path.exists():
             return Response({'error': '模板文件不存在'}, status=status.HTTP_404_NOT_FOUND)
 
-        content_types = {
-            '.xls': 'application/vnd.ms-excel',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        }
-        suffix = template_path.suffix.lower()
         return FileResponse(
             template_path.open('rb'),
             as_attachment=True,
-            filename=f'花名册数据模版{suffix}',
-            content_type=content_types.get(suffix, 'application/octet-stream'),
+            filename='花名册数据模版.xlsx',
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
 
     def _map_gender(self, value):
