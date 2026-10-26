@@ -344,7 +344,10 @@ class OnlyOfficeCallbackView(APIView):
             return Response({'error': 1, 'message': '下载 OnlyOffice 保存文件失败'}, status=status.HTTP_502_BAD_GATEWAY)
         suffix = Path(document.file.name).suffix or '.xlsx'
         document.version += 1
-        document.document_key = f'form-{task.id}-v{document.version}'
+        # Force-save (6) keeps the editing session open and its callbacks keep
+        # using the same key. Rotate only when the final close-save (2) arrives.
+        if request.data.get('status') == 2:
+            document.document_key = f'form-{task.id}-v{document.version}'
         document.file.save(f'{task.id}-v{document.version}{suffix}', ContentFile(content), save=False)
         document.file_size = document.file.size
         document.storage_path = document.file.path

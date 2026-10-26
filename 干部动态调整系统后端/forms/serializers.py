@@ -8,6 +8,9 @@ class ExtendDeadlineSerializer(serializers.Serializer):
 
 
 class FormTemplateSerializer(serializers.ModelSerializer):
+    # An omitted multipart checkbox must use the model's enabled-by-default policy.
+    is_active = serializers.BooleanField(required=False, default=True)
+
     class Meta:
         model = FormTemplate
         fields = [
