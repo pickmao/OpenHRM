@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 from .models import PersonnelRoster, Cadre, CadreResume
 
 
@@ -9,7 +10,11 @@ class PersonnelRosterSerializer(serializers.ModelSerializer):
     class Meta:
         model = PersonnelRoster
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+        extra_kwargs = {
+            'police_number': {'validators': [UniqueValidator(queryset=PersonnelRoster.all_objects.all())]},
+            'id_card': {'validators': [UniqueValidator(queryset=PersonnelRoster.all_objects.all())]},
+        }
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'is_active']
 
     def validate_id_card(self, value):
         """验证身份证号格式"""
