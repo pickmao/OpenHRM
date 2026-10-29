@@ -17,7 +17,7 @@
           <el-input
             v-model="loginForm.username"
             placeholder="请输入用户名"
-            prefix-icon="User"
+            :prefix-icon="User"
             size="large"
             clearable
           />
@@ -28,7 +28,7 @@
             v-model="loginForm.password"
             type="password"
             placeholder="请输入密码"
-            prefix-icon="Lock"
+            :prefix-icon="Lock"
             size="large"
             show-password
             clearable
