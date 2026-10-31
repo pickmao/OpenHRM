@@ -22,6 +22,7 @@ from .serializers import (
 )
 from .services import create_onlyoffice_document, preview_dispatch, publish_dispatch, return_task, save_submission, visible_tasks, extend_deadline
 from .dashboard_service import FormDashboardService
+from .recipients import roster_recipient_options
 
 
 def can_manage_dispatch(user):
@@ -93,6 +94,7 @@ class DispatchOptionsView(APIView):
         return Response({
             'roles': list(Role.objects.filter(is_active=True).values('code', 'name')),
             'users': list(User.objects.filter(is_active=True).order_by('real_name', 'username').values('id', 'real_name', 'username')),
+            'roster_people': roster_recipient_options(),
         })
 
 

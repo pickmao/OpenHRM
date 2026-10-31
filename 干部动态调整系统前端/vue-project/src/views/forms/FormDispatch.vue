@@ -54,11 +54,20 @@
               <a-select v-model:value="form.roleCodes" mode="multiple" show-search option-filter-prop="label" placeholder="选择角色，系统自动去重并排除禁用账号" :options="roles.map(role => ({ value: role.code, label: role.name }))" />
             </a-form-item>
             <a-form-item v-if="recipientMode === 'selected'" label="填报人员">
-              <a-select v-model:value="form.userIds" mode="multiple" show-search option-filter-prop="label" :loading="loadingUsers" placeholder="选择需要填写表格的人员">
+              <a-radio-group v-model:value="recipientSource" class="recipient-source">
+                <a-radio value="roster">从花名册选择</a-radio>
+                <a-radio value="accounts">从系统账号选择</a-radio>
+              </a-radio-group>
+              <a-select v-if="recipientSource === 'roster'" v-model:value="form.rosterIds" mode="multiple" show-search option-filter-prop="label" :loading="loadingUsers" :options="rosterOptions" placeholder="按姓名或部门搜索花名册人员" />
+              <a-select v-else v-model:value="form.userIds" mode="multiple" show-search option-filter-prop="label" :loading="loadingUsers" placeholder="选择需要填写表格的人员">
                 <a-select-option v-for="user in users" :key="user.id" :value="user.id" :label="user.real_name || user.username">
                   {{ user.real_name || user.username }}（{{ user.username }}）
                 </a-select-option>
               </a-select>
+              <div v-if="recipientSource === 'roster'" class="form-hint">没有登录账号的花名册人员显示“尚未注册”，注册并启用账号后才能接收填报任务；账号停用或重名待核对的人员会显示具体状态。</div>
+              <a-alert v-if="usersError" type="error" show-icon :message="usersError" class="batch-info">
+                <template #action><a-button size="small" @click="loadUsers">重新加载</a-button></template>
+              </a-alert>
             </a-form-item>
             <a-space>
               <a-button @click="preview">预览下发名单</a-button>
@@ -84,6 +93,8 @@ import { registerModelContextTools } from '@/utils/webmcp'
 
 const templates = ref([])
 const users = ref([])
+const rosterPeople = ref([])
+const usersError = ref('')
 const roles = ref([])
 const batches = ref([])
 const loadingTemplates = ref(false)
@@ -94,9 +105,10 @@ const publishing = ref(false)
 const previewOpen = ref(false)
 const previewItems = ref([])
 const recipientMode = ref('selected')
+const recipientSource = ref('roster')
 const batchMode = ref('new')
 const selectedFile = ref(null)
-const form = reactive({ templateId: undefined, batchId: undefined, batchName: '', deadlineAt: null, userIds: [], roleCodes: [] })
+const form = reactive({ templateId: undefined, batchId: undefined, batchName: '', deadlineAt: null, userIds: [], rosterIds: [], roleCodes: [] })
 const upload = reactive({ name: '', code: '' })
 
 const previewColumns = [
@@ -109,6 +121,18 @@ const batchOptions = computed(() => batches.value.filter(item => item.status !==
   label: `${item.name}（截止：${new Date(item.deadline_at).toLocaleString()}）`
 })))
 const selectedBatch = computed(() => batches.value.find(item => item.id === form.batchId))
+const accountStateLabels = { READY: '可填报', MISSING: '尚未注册', DISABLED: '账号已停用', AMBIGUOUS: '重名身份待核对' }
+const rosterOptions = computed(() => rosterPeople.value.map(person => ({
+  value: person.roster_id,
+  label: `${person.name}（${person.department || '未填部门'}） · ${person.username || accountStateLabels[person.account_state] || '待核对'}`,
+})))
+const selectedUserIds = () => {
+  if (recipientSource.value === 'accounts') return form.userIds
+  const selected = form.rosterIds.map(id => rosterPeople.value.find(person => person.roster_id === id))
+  const unavailable = selected.filter(person => !person?.user_id)
+  if (unavailable.length) throw new Error(`以下人员暂不能接收任务：${unavailable.map(person => `${person?.name || '人员已不在花名册'}（${accountStateLabels[person?.account_state] || '请刷新核对'}）`).join('、')}`)
+  return [...new Set(selected.map(person => person.user_id))]
+}
 
 const loadTemplates = async () => {
   loadingTemplates.value = true
@@ -120,7 +144,17 @@ const loadTemplates = async () => {
 }
 const loadUsers = async () => {
   loadingUsers.value = true
-  try { const result = await formsApi.getDispatchOptions(); users.value = result.users; roles.value = result.roles } catch (_) { users.value = []; roles.value = []; message.error('下发人员和角色加载失败，请刷新重试') } finally { loadingUsers.value = false }
+  usersError.value = ''
+  try {
+    const result = await formsApi.getDispatchOptions()
+    users.value = result.users || []
+    roles.value = result.roles || []
+    rosterPeople.value = result.roster_people || []
+  } catch (_) {
+    users.value = []; roles.value = []; rosterPeople.value = []
+    usersError.value = '下发人员加载失败，请重新加载；若花名册也无法打开，请联系管理员检查数据库迁移。'
+    message.error(usersError.value)
+  } finally { loadingUsers.value = false }
 }
 const loadBatches = async () => {
   loadingBatches.value = true
@@ -151,13 +185,14 @@ const payload = () => {
   if (!form.templateId) throw new Error('请先选择表格')
   if (batchMode.value === 'new' && (!form.batchName || !form.deadlineAt)) throw new Error('请填写新建批次名称和截止时间')
   if (batchMode.value === 'existing' && !form.batchId) throw new Error('请选择要追加的填报批次')
-  if (recipientMode.value === 'selected' && !form.userIds.length) throw new Error('请至少选择一名填报人员')
+  const userIds = recipientMode.value === 'selected' ? selectedUserIds() : []
+  if (recipientMode.value === 'selected' && !userIds.length) throw new Error('请至少选择一名填报人员')
   if (recipientMode.value === 'roles' && !form.roleCodes.length) throw new Error('请至少选择一个接收角色')
   const result = {
     rules: [{
       template_id: form.templateId,
       receiver_type: recipientMode.value === 'roles' ? 'ORG_ROLE' : 'USER',
-      receiver_expr_json: recipientMode.value === 'roles' ? { role_codes: form.roleCodes } : recipientMode.value === 'all' ? { all_users: true } : { user_ids: form.userIds }
+      receiver_expr_json: recipientMode.value === 'roles' ? { role_codes: form.roleCodes } : recipientMode.value === 'all' ? { all_users: true } : { user_ids: userIds }
     }]
   }
   if (batchMode.value === 'new') {
@@ -179,6 +214,7 @@ const publish = async () => {
     const result = await formsApi.publishDispatch(payload())
     message.success(`下发成功，已创建 ${result.summary.created_tasks} 个任务`)
     form.userIds = []
+    form.rosterIds = []
     await loadBatches()
   } catch (error) { message.error(error.response?.data?.detail || error.message || '下发失败') } finally { publishing.value = false }
 }
@@ -189,7 +225,7 @@ const stageDispatch = async input => {
   if (input.batchMode === 'new' && (!input.batchName?.trim() || !input.deadlineAt)) throw new Error('新建批次必须提供批次名称和截止时间')
   if (input.batchMode === 'existing' && !batches.value.some(item => item.id === input.batchId && item.status !== 'CLOSED')) throw new Error('未找到可追加的填报批次')
   if (input.recipientMode === 'selected') { if (!input.userIds?.length) throw new Error('请选择至少一名填报人员'); const known = new Set(users.value.map(item => item.id)); const unknown = input.userIds.find(id => !known.has(id)); if (unknown) throw new Error(`未知用户 ID：${unknown}`) }
-  Object.assign(form, { templateId: input.templateId, batchId: input.batchId, batchName: input.batchName?.trim() || '', deadlineAt: input.deadlineAt || null, userIds: input.userIds ? [...input.userIds] : [] }); batchMode.value = input.batchMode; recipientMode.value = input.recipientMode; await nextTick()
+  Object.assign(form, { templateId: input.templateId, batchId: input.batchId, batchName: input.batchName?.trim() || '', deadlineAt: input.deadlineAt || null, userIds: input.userIds ? [...input.userIds] : [], rosterIds: [] }); batchMode.value = input.batchMode; recipientMode.value = input.recipientMode; recipientSource.value = 'accounts'; await nextTick()
 }
 let unregisterWebMcpTools = () => {}
 const registerWebMcpTools = () => {
@@ -230,5 +266,6 @@ onUnmounted(() => unregisterWebMcpTools())
 .dispatch-form { margin-top: 20px; }
 .preview-alert { margin-bottom: 16px; }
 .form-hint { margin-top: 6px; color: #8c8c8c; font-size: 12px; }
+.recipient-source { margin-bottom: 10px; }
 .batch-info { margin-bottom: 16px; }
 </style>
