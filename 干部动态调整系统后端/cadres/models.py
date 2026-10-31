@@ -155,8 +155,17 @@ class CadreResume(models.Model):
         return f"{self.cadre.name} - {self.position_title} ({self.start_date} - {self.end_date or '至今'})"
 
 
+class CurrentRosterManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_active=True)
+
+
 class PersonnelRoster(models.Model):
     """花名册 - 完整版干部信息"""
+    is_active = models.BooleanField('当前花名册成员', default=True, db_index=True)
+    objects = CurrentRosterManager()
+    all_objects = models.Manager()
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     serial_number = models.IntegerField('序号', db_index=True)
 
@@ -291,6 +300,8 @@ class PersonnelRoster(models.Model):
     )
 
     class Meta:
+        base_manager_name = 'all_objects'
+        default_manager_name = 'objects'
         verbose_name = '花名册'
         verbose_name_plural = '花名册'
         ordering = ['serial_number', 'department', 'name']

@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 from datetime import datetime
 from django.db.models import Q
@@ -8,6 +9,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 
+from .roster_replacement import RosterReplacementError, replace_current_roster
 from .models import PersonnelRoster, Cadre, CadreResume
 from .serializers import (
     PersonnelRosterSerializer,
@@ -74,7 +76,7 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
     def upload_excel(self, request):
         """
         上传 Excel 并导入花名册。
-        默认 replace=true：清空原有花名册后整表覆盖写入。
+        默认 replace=true：更新当前花名册，移出人员保留历史引用。
         传 replace=false 时追加导入（唯一冲突跳过）。
         """
         from django.db import transaction
@@ -154,7 +156,7 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
                     roster_data['id_card'] = id_card
                     roster_data['police_number'] = police_number
                     roster = PersonnelRoster(**roster_data)
-                    roster.full_clean(exclude=['created_by'])
+                    roster.full_clean(exclude=['created_by'], validate_unique=not replace)
                     roster_list.append(roster)
                     success_count += 1
                 except Exception as e:
@@ -167,9 +169,9 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
 
             deleted_count = 0
             created_count = 0
-            if replace and not roster_list:
+            if replace and (not roster_list or error_count):
                 return Response({
-                    'error': '覆盖导入失败：文件中没有可写入的有效记录，已保留原有花名册。',
+                    'error': '覆盖导入失败：文件存在无效记录或没有有效人员，已保留原有花名册，请核对错误明细。',
                     'total': total_rows,
                     'success_count': 0,
                     'created_count': 0,
@@ -178,28 +180,27 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
                     'errors': errors[:10],
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            updated_count = 0
+            from .org_alignment import sync_memberships_from_rosters
             with transaction.atomic():
                 if replace:
-                    deleted_count = PersonnelRoster.objects.count()
-                    PersonnelRoster.objects.all().delete()
-                    PersonnelRoster.objects.bulk_create(roster_list, batch_size=100)
-                    created_count = len(roster_list)
+                    counts = replace_current_roster(roster_list, actor=request.user)
+                    deleted_count = counts['deleted_count']
+                    created_count = counts['created_count']
+                    updated_count = counts['updated_count']
                 elif roster_list:
                     before = PersonnelRoster.objects.count()
                     PersonnelRoster.objects.bulk_create(roster_list, batch_size=100, ignore_conflicts=True)
                     created_count = PersonnelRoster.objects.count() - before
-
-            from .org_alignment import sync_memberships_from_rosters
-            # bulk_create 不发 post_save，导入后按花名册当前部门对齐账号主部门。
-            sync_memberships_from_rosters(
-                PersonnelRoster.objects.all() if replace else roster_list,
-                actor=request.user,
-            )
+                sync_memberships_from_rosters(
+                    PersonnelRoster.objects.all() if replace else roster_list,
+                    actor=request.user,
+                )
 
             mode_label = '覆盖导入' if replace else '追加导入'
             return Response({
                 'message': (
-                    f'{mode_label}完成！删除原有 {deleted_count} 条，写入 {created_count} 条，'
+                    f'{mode_label}完成！移出当前名单 {deleted_count} 条（历史记录保留），新增 {created_count} 条，更新 {updated_count} 条，'
                     f'解析成功 {success_count} 条，失败 {error_count} 条'
                     if replace else
                     f'{mode_label}完成！新增 {created_count} 条，解析成功 {success_count} 条，失败 {error_count} 条'
@@ -209,13 +210,18 @@ class PersonnelRosterViewSet(viewsets.ModelViewSet):
                 'success_count': success_count,
                 'created_count': created_count,
                 'deleted_count': deleted_count,
+                'archived_count': deleted_count,
+                'updated_count': updated_count,
                 'error_count': error_count,
                 'errors': errors[:10]
             }, status=status.HTTP_201_CREATED)
 
-        except Exception as e:
+        except RosterReplacementError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            logging.getLogger(__name__).exception('花名册导入失败')
             return Response(
-                {'error': f'文件处理失败: {str(e)}'},
+                {'error': '花名册导入失败，原有数据未更改。请检查文件格式或联系管理员。'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

@@ -95,6 +95,7 @@ import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
 import { knowingPeopleApi } from '@/api/knowingPeople'
+import { firstApiError } from '@/utils/apiError'
 
 const router = useRouter()
 const campaigns = ref([])
@@ -150,14 +151,14 @@ const load = async () => {
     const data = await knowingPeopleApi.getCampaigns()
     campaigns.value = Array.isArray(data) ? data : data?.results || []
   } catch (error) {
-    message.error(error.response?.data?.detail || '批次加载失败')
+    message.error(firstApiError(error.response?.data) || '批次加载失败')
   } finally { loading.value = false }
 }
 const loadOptions = async () => {
   try {
     options.value = await knowingPeopleApi.getOptions()
   } catch (error) {
-    message.error(error.response?.data?.detail || '下发选项加载失败')
+    message.error(firstApiError(error.response?.data) || '下发选项加载失败')
   }
 }
 const openCreator = async () => {
@@ -189,7 +190,7 @@ const preview = async () => {
     previewData.value = await knowingPeopleApi.previewCampaign(basePayload())
     message.success(`预览完成，共 ${previewTotal.value} 人`)
   } catch (error) {
-    message.error(error.response?.data?.detail || error.response?.data?.form_types?.[0] || '预览失败')
+    message.error(firstApiError(error.response?.data) || '预览失败')
   }
 }
 const removeRecipient = (group, record) => {
@@ -236,8 +237,7 @@ const create = async () => {
     creatorOpen.value = false
     await load()
   } catch (error) {
-    const data = error.response?.data
-    message.error(data?.detail || data?.recipients?.[0] || data?.deadline_at?.[0] || '下发失败')
+    message.error(firstApiError(error.response?.data) || '下发失败')
   } finally { saving.value = false }
 }
 const close = async record => {
@@ -246,7 +246,7 @@ const close = async record => {
     message.success('批次已关闭')
     await load()
   } catch (error) {
-    message.error(error.response?.data?.detail || '关闭失败')
+    message.error(firstApiError(error.response?.data) || '关闭失败')
   }
 }
 const goProgress = record => router.push({ name: 'KnowingPeopleProgress', query: { campaign: record.id } })

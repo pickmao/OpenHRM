@@ -4,6 +4,7 @@ services:
       ALLOWED_HOSTS: zqxiaochengxv.xin,www.zqxiaochengxv.xin,47.236.89.16,frontend,localhost,127.0.0.1
       CSRF_TRUSTED_ORIGINS: https://zqxiaochengxv.xin,https://www.zqxiaochengxv.xin
       ONLYOFFICE_DOCUMENT_SERVER: https://zqxiaochengxv.xin/onlyoffice
+      ONLYOFFICE_BACKEND_PUBLIC_URL: https://zqxiaochengxv.xin
   frontend:
     ports: !reset []
     volumes:

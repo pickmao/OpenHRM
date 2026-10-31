@@ -43,7 +43,7 @@
           删除选中 ({{ selectedRowKeys.length }})
         </a-button>
       </a-space>
-      <div class="upload-hint">上传新表会清空并覆盖当前全部花名册记录，请先确认文件无误。</div>
+      <div class="upload-hint">新表将更新当前花名册；未出现在新表中的人员移出当前名单，历史关联记录保留。</div>
 
       <!-- 上传进度 -->
       <div v-if="uploading" class="upload-progress">
@@ -322,8 +322,9 @@
         <template #subTitle>
           <a-space :size="24" wrap>
             <a-statistic title="总行数" :value="importResult.total" />
-            <a-statistic title="写入" :value="importResult.created_count ?? importResult.success_count" :value-style="{ color: '#52c41a' }" />
-            <a-statistic v-if="importResult.mode === 'replace'" title="已删除原数据" :value="importResult.deleted_count || 0" :value-style="{ color: '#fa8c16' }" />
+            <a-statistic title="新增" :value="importResult.created_count ?? importResult.success_count" :value-style="{ color: '#52c41a' }" />
+            <a-statistic title="更新" :value="importResult.updated_count || 0" :value-style="{ color: '#52c41a' }" />
+            <a-statistic v-if="importResult.mode === 'replace'" title="移出当前名单" :value="importResult.archived_count ?? importResult.deleted_count ?? 0" :value-style="{ color: '#fa8c16' }" />
             <a-statistic title="失败" :value="importResult.error_count" :value-style="{ color: '#f5222d' }" />
           </a-space>
         </template>
@@ -472,6 +473,8 @@ const importResult = reactive({
   total: 0,
   success_count: 0,
   created_count: 0,
+      updated_count: 0,
+      archived_count: 0,
   deleted_count: 0,
   error_count: 0,
   errors: []
@@ -573,7 +576,7 @@ const beforeUpload = (file) => {
 
   Modal.confirm({
     title: '覆盖导入花名册？',
-    content: `将清空并覆盖当前全部花名册数据，再写入「${file.name}」中的记录。此操作不可恢复，是否继续？`,
+    content: `将以「${file.name}」更新当前花名册，移出不在新表中的人员。历史推荐和测评记录将保留，是否继续？`,
     okText: '确认覆盖导入',
     okType: 'danger',
     cancelText: '取消',
@@ -616,6 +619,8 @@ const handleUpload = async (file) => {
       total: 0,
       success_count: 0,
       created_count: 0,
+      updated_count: 0,
+      archived_count: 0,
       deleted_count: 0,
       error_count: 0,
       errors: [],

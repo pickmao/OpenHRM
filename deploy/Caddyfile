@@ -1,4 +1,5 @@
 zqxiaochengxv.xin, www.zqxiaochengxv.xin {
+    encode zstd gzip
     reverse_proxy frontend:80
 }
 

@@ -31,7 +31,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       ONLYOFFICE_DOCUMENT_SERVER: http://${PUBLIC_HOST}/onlyoffice
-      ONLYOFFICE_BACKEND_PUBLIC_URL: http://frontend
+      ONLYOFFICE_BACKEND_PUBLIC_URL: http://${PUBLIC_HOST}
     depends_on:
       db:
         condition: service_healthy
