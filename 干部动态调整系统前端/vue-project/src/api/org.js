@@ -1,5 +1,9 @@
 import request from '@/utils/request'
 
+export function getTransferHistory(params) {
+  return request({ url: '/org/memberships/transfer-history/', method: 'get', params })
+}
+
 /**
  * 组织架构管理 API
  */
@@ -41,7 +45,7 @@ export function getDepartmentList(params) {
  */
 export function getDepartmentDetail(id) {
   return request({
-    url: `/org/units/${id}`,
+    url: `/org/units/${id}/`,
     method: 'get'
   })
 }
@@ -73,7 +77,7 @@ export function createDepartment(data) {
  */
 export function updateDepartment(id, data) {
   return request({
-    url: `/org/units/${id}`,
+    url: `/org/units/${id}/`,
     method: 'patch',
     data
   })
@@ -86,7 +90,7 @@ export function updateDepartment(id, data) {
  */
 export function deleteDepartment(id) {
   return request({
-    url: `/org/units/${id}`,
+    url: `/org/units/${id}/`,
     method: 'delete'
   })
 }
@@ -135,7 +139,7 @@ export function reorderDepartments(data) {
  */
 export function getDepartmentMembers(unitId, params) {
   return request({
-    url: `/org/units/${unitId}/members`,
+    url: `/org/units/${unitId}/members/`,
     method: 'get',
     params
   })
@@ -183,7 +187,7 @@ export function addMember(data) {
  */
 export function removeMember(id) {
   return request({
-    url: `/org/memberships/${id}`,
+    url: `/org/memberships/${id}/`,
     method: 'delete'
   })
 }
@@ -208,7 +212,7 @@ export function getUserMemberships(userId) {
  */
 export function getMemberDetail(id) {
   return request({
-    url: `/org/memberships/${id}`,
+    url: `/org/memberships/${id}/`,
     method: 'get'
   })
 }
@@ -221,8 +225,101 @@ export function getMemberDetail(id) {
  */
 export function updateMember(id, data) {
   return request({
-    url: `/org/memberships/${id}`,
+    url: `/org/memberships/${id}/`,
     method: 'patch',
     data
+  })
+}
+
+/** 提交人员部门调配。 */
+export function createTransferRequest(data) {
+  return request({
+    url: '/org/memberships/transfer/',
+    method: 'post',
+    data
+  })
+}
+
+// ==================== 支部管理 ====================
+
+export function getBranchCatalog() {
+  return request({ url: '/org/branches/reference-catalog/', method: 'get' })
+}
+
+export function applyBranchCatalog() {
+  return request({ url: '/org/branches/reference-catalog/', method: 'post' })
+}
+
+export function getBranchList(params) {
+  return request({
+    url: '/org/branches/',
+    method: 'get',
+    params
+  })
+}
+
+export function createBranch(data) {
+  return request({
+    url: '/org/branches/',
+    method: 'post',
+    data
+  })
+}
+
+export function updateBranch(id, data) {
+  return request({
+    url: `/org/branches/${id}/`,
+    method: 'patch',
+    data
+  })
+}
+
+export function deleteBranch(id) {
+  return request({
+    url: `/org/branches/${id}/`,
+    method: 'delete'
+  })
+}
+
+export function getAssignableDepartments(params) {
+  return request({
+    url: '/org/branches/assignable-departments/',
+    method: 'get',
+    params
+  })
+}
+
+export function assignDepartmentsToBranch(id, departmentIds) {
+  return request({
+    url: `/org/branches/${id}/assign-departments/`,
+    method: 'post',
+    data: { department_ids: departmentIds }
+  })
+}
+
+export function removeDepartmentsFromBranch(id, departmentIds) {
+  return request({
+    url: `/org/branches/${id}/remove-departments/`,
+    method: 'post',
+    data: { department_ids: departmentIds }
+  })
+}
+
+export function downloadBranchTemplate() {
+  return request({
+    url: '/org/branches/download-template/',
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
+export function uploadBranchExcel(formData, onUploadProgress) {
+  return request({
+    url: '/org/branches/upload-excel/',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+    onUploadProgress
   })
 }

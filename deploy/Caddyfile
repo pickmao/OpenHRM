@@ -1,0 +1,8 @@
+zqxiaochengxv.xin, www.zqxiaochengxv.xin {
+    encode zstd gzip
+    reverse_proxy frontend:80
+}
+
+http://47.236.89.16 {
+    redir https://zqxiaochengxv.xin{uri} permanent
+}

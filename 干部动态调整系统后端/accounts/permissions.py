@@ -15,6 +15,8 @@ class HasPermissionCode(permissions.BasePermission):
 
         # 获取视图所需的权限码
         permission_code = getattr(view, 'permission_code', None)
+        if not permission_code and hasattr(view, 'get_permission_code'):
+            permission_code = view.get_permission_code()
         if not permission_code:
             return True  # 如果没有设置权限码，默认允许
 

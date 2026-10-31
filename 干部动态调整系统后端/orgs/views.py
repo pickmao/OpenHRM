@@ -157,7 +157,9 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     def members(self, request, pk=None):
         """获取部门成员列表"""
         unit = self.get_object()
-        memberships = unit.memberships.select_related('user__real_name', 'unit').filter(
+        # `real_name` 是用户模型的普通字段，不能作为 select_related 的关系路径。
+        # 这里只需预取会员关系关联的用户和组织单元。
+        memberships = unit.memberships.select_related('user', 'unit').filter(
             effective_to__isnull=True
         )
 

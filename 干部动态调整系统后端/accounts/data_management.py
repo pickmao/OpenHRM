@@ -13,36 +13,75 @@ def init_roles_and_permissions():
     # 定义角色权限映射
     ROLE_PERMISSIONS = {
         'SUPER_ADMIN': [
+            'accounts:role:view', 'accounts:role:create', 'accounts:role:edit',
+            'accounts:role:delete', 'accounts:role:grant_permissions',
+            'accounts:permission:view_catalog', 'accounts:user:view',
+            'accounts:user:manage', 'accounts:user:assign_role', 'accounts:user:view_roles',
             'cadres:view', 'cadres:create', 'cadres:edit', 'cadres:delete',
             'orgs:view', 'orgs:create', 'orgs:edit', 'orgs:delete',
             'staffing:plan:create', 'staffing:plan:submit', 'staffing:plan:apply',
             'risk:view', 'risk:manage',
-            'audit:view'
+            'audit:view',
+            'forms:template:manage', 'forms:dispatch:manage',
+            'forms:task:view', 'forms:task:submit', 'forms:task:manage'
+            , 'orgs:membership:transfer', 'rewards:view', 'rewards:manage',
+            'anonymous_evaluations:campaign:manage', 'anonymous_evaluations:task:view',
+            'anonymous_evaluations:task:submit', 'anonymous_evaluations:result:view',
+            'cadre_recommendations:campaign:manage', 'cadre_recommendations:task:view',
+            'cadre_recommendations:task:submit', 'cadre_recommendations:result:view',
+            'knowing_people:campaign:manage', 'knowing_people:task:view',
+            'knowing_people:task:submit', 'knowing_people:result:view'
         ],
         'POLITICAL_OFFICE_ADMIN': [
+            'accounts:role:view', 'accounts:role:create', 'accounts:role:edit',
+            'accounts:role:grant_permissions', 'accounts:permission:view_catalog',
+            'accounts:user:view', 'accounts:user:manage', 'accounts:user:assign_role',
+            'accounts:user:view_roles',
             'cadres:view', 'cadres:edit',
             'orgs:view',
             'staffing:plan:create', 'staffing:plan:submit', 'staffing:plan:apply',
             'risk:view', 'risk:manage',
-            'audit:view'
+            'audit:view',
+            'forms:template:manage', 'forms:dispatch:manage',
+            'forms:task:view', 'forms:task:submit', 'forms:task:manage'
+            , 'orgs:membership:transfer', 'rewards:view', 'rewards:manage',
+            'anonymous_evaluations:campaign:manage', 'anonymous_evaluations:task:view',
+            'anonymous_evaluations:task:submit', 'anonymous_evaluations:result:view',
+            'cadre_recommendations:campaign:manage', 'cadre_recommendations:task:view',
+            'cadre_recommendations:task:submit', 'cadre_recommendations:result:view',
+            'knowing_people:campaign:manage', 'knowing_people:task:view',
+            'knowing_people:task:submit', 'knowing_people:result:view'
         ],
         'DEPT_MANAGER': [
             'cadres:view',
             'orgs:view',
             'staffing:plan:create',
             'risk:view',
-            'audit:view'
+            'audit:view',
+            'forms:task:view', 'forms:task:submit',
+            'anonymous_evaluations:task:view', 'anonymous_evaluations:task:submit',
+            'cadre_recommendations:task:view', 'cadre_recommendations:task:submit',
+            'knowing_people:task:view', 'knowing_people:task:submit'
+            , 'orgs:membership:transfer'
         ],
         'ANALYST': [
             'cadres:view',
             'orgs:view',
             'analytics:view',
             'risk:view',
-            'audit:view'
+            'audit:view',
+            'rewards:view',
+            'anonymous_evaluations:result:view',
+            'cadre_recommendations:result:view',
+            'knowing_people:result:view'
         ],
         'CADRE_SELF': [
             'cadres:view_self',
-            'audit:view_self'
+            'audit:view_self',
+            'forms:task:view', 'forms:task:submit',
+            'anonymous_evaluations:task:view', 'anonymous_evaluations:task:submit',
+            'cadre_recommendations:task:view', 'cadre_recommendations:task:submit',
+            'knowing_people:task:view', 'knowing_people:task:submit'
         ]
     }
 

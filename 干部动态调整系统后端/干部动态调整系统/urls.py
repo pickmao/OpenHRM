@@ -40,8 +40,17 @@ schema_view = get_schema_view(
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include('accounts.urls')),
+    path("api/admin/", include('accounts.admin_urls')),
     path("api/", include('cadres.urls')),
     path("api/org/", include('orgs.urls')),
+    path("api/forms/", include('forms.urls')),
+    path("api/assessments/", include('assessments.urls')),
+    path("api/leadership-assessments/", include('leadership_assessments.urls')),
+    path("api/rewards/", include('rewards_punishments.urls')),
+    path("api/evaluations/", include('anonymous_evaluations.urls')),
+    path("api/inspections/", include('inspections.urls')),
+    path("api/recommendations/", include('cadre_recommendations.urls')),
+    path("api/knowing-people/", include('knowing_people.urls')),
     # Swagger文档
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
@@ -54,3 +63,4 @@ urlpatterns = [
 # 开发模式下服务静态文件
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -49,10 +49,18 @@ INSTALLED_APPS = [
     # Apps
     "accounts",
     "orgs",
-    "cadres",
+    "cadres.apps.CadresConfig",
     "staffing",
     "risk_rules",
     "audit",
+    "forms",
+    "assessments",
+    "leadership_assessments",
+    "rewards_punishments",
+    "anonymous_evaluations",
+    "inspections",
+    "cadre_recommendations",
+    "knowing_people.apps.KnowingPeopleConfig",
 ]
 
 MIDDLEWARE = [
@@ -139,6 +147,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = []  # 可以添加额外的静态文件目录
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -230,3 +240,10 @@ import os
 log_dir = BASE_DIR / 'logs'
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
+
+# OnlyOffice Document Server 地址；部署时可通过环境变量覆盖。
+# 本机现有的 OnlyOffice Document Server 容器映射到 8080；部署环境可通过环境变量覆盖。
+ONLYOFFICE_DOCUMENT_SERVER = os.environ.get('ONLYOFFICE_DOCUMENT_SERVER', 'http://localhost:8080')
+# OnlyOffice 运行在 Docker 容器中；它访问宿主机 Django 服务时不能使用浏览器侧的
+# 127.0.0.1。生产环境可设置为实际公网/API 地址。
+ONLYOFFICE_BACKEND_PUBLIC_URL = os.environ.get('ONLYOFFICE_BACKEND_PUBLIC_URL', 'http://host.docker.internal:8000')
