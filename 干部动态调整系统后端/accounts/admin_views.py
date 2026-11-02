@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from audit.models import AuditAction, AuditLog
 
-from .admin_serializers import AdminUserListSerializer, RolePermissionsSerializer, RoleSerializer, UserRolesSerializer
+from .admin_serializers import AdminUserCreateSerializer, AdminUserListSerializer, RolePermissionsSerializer, RoleSerializer, UserRolesSerializer
 from .models import Role, UserRole
 from .permission_catalog import catalog_response
 from .permissions import HasPermissionCode
@@ -81,7 +81,9 @@ class PermissionCatalogView(APIView):
 
 class AdminUserListView(APIView):
     permission_classes = [IsAuthenticated, HasPermissionCode]
-    permission_code = 'accounts:user:view'
+
+    def get_permission_code(self):
+        return 'accounts:user:manage' if self.request.method == 'POST' else 'accounts:user:view'
 
     def get(self, request):
         keyword = request.query_params.get('keyword', '').strip()
@@ -89,6 +91,19 @@ class AdminUserListView(APIView):
         if keyword:
             queryset = queryset.filter(Q(username__icontains=keyword) | Q(real_name__icontains=keyword))
         return Response(AdminUserListSerializer(queryset, many=True).data)
+
+    def post(self, request):
+        serializer = AdminUserCreateSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                audit(request.user, 'User', user.id, {'action': 'create_user', 'username': user.username})
+        except IntegrityError:
+            if User.objects.filter(username=serializer.validated_data['username']).exists():
+                return Response({'username': ['该账号已存在']}, status=status.HTTP_400_BAD_REQUEST)
+            raise
+        return Response(AdminUserListSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
 class UserRoleDetailView(APIView):
