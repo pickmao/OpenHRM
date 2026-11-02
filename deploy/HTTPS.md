@@ -33,3 +33,15 @@ curl https://zqxiaochengxv.xin/onlyoffice/healthcheck
 ```
 
 Expect HTTPS 200, HTTP 308, and OnlyOffice `true`. Do not use `curl -k`.
+
+OnlyOffice resource loading also needs a browser check with an existing Excel
+task. A passing health check does not confirm that fonts or document data have
+finished downloading. The `/onlyoffice/` proxy clears the upstream `Via` header:
+Caddy supplies it, but OnlyOffice's default `gzip_proxied` policy would otherwise
+disable its existing `.gz` font and SDK representations. Forwarded host, scheme,
+client address and WebSocket upgrade headers are still preserved.
+
+For a font URL observed in the browser's network panel, compare HEAD responses
+with `Accept-Encoding: gzip` and `Accept-Encoding: identity`. The gzip response
+should have `Content-Encoding: gzip` and a smaller `Content-Length`. Then verify
+that the actual spreadsheet renders and that edits survive saving and reopening.
