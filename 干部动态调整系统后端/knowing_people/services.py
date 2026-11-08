@@ -91,6 +91,7 @@ def _recipient_from_override(item):
         FormType.ATTACHMENT_4: FillerRole.BRANCH_LEADERSHIP,
         FormType.ATTACHMENT_6_2: FillerRole.BRANCH_STAFF,
         FormType.ATTACHMENT_1: FillerRole.INSPECTION_TALKER,
+        FormType.INSPECTION_REVIEW: FillerRole.INSPECTION_TALKER,
     }.get(form_type, role)
     return recipient_payload(
         user,
@@ -147,7 +148,7 @@ def create_campaign(data, creator):
         context['period_start'] = campaign.period_start.isoformat() if campaign.period_start else ''
         context['period_end'] = campaign.period_end.isoformat() if campaign.period_end else ''
         branch = context.get('branch') or {}
-        if item['form_type'] in {FormType.ATTACHMENT_4, FormType.ATTACHMENT_5, FormType.ATTACHMENT_6_2, FormType.ATTACHMENT_7_4, FormType.ATTACHMENT_1} and not branch.get('id'):
+        if item['form_type'] in {FormType.ATTACHMENT_4, FormType.ATTACHMENT_5, FormType.ATTACHMENT_6_2, FormType.ATTACHMENT_7_4, FormType.ATTACHMENT_1, FormType.INSPECTION_REVIEW} and not branch.get('id'):
             raise ValidationError({'recipients': f'{item["user_name"]}的{item["form_label"]}未关联支部，请在预览中指定支部。'})
         if item['form_type'] in branch_forms:
             representative_key = (item['form_type'], branch['id'])
@@ -170,6 +171,11 @@ def create_campaign(data, creator):
             context_json=context,
         ))
     InspectionTask.objects.bulk_create(tasks)
+    if data.get('assessment_date'):
+        from .assessment_collection import can_configure_collection, configure_collection
+        if not can_configure_collection(creator):
+            raise PermissionDenied('自动归集需要班子、干部研判维护权限。')
+        configure_collection(campaign, creator, {'version_date': data['assessment_date']})
     return campaign
 
 
@@ -235,6 +241,10 @@ def campaign_summary(campaign, *, include_progress=False):
             {'branch_name': key, **progress_stats(items)}
             for key, items in sorted(by_branch.items())
         ]
+    from .assessment_collection import collection_summary
+    from .models import AssessmentCollection
+    link = AssessmentCollection.objects.select_related('leadership_file', 'cadre_file').filter(campaign=campaign).first()
+    payload['assessment_collection'] = collection_summary(link)
     return payload
 
 
@@ -269,7 +279,8 @@ def serialize_task(task, *, include_form=False, user=None):
     if include_form:
         context = task.context_json or {}
         payload['schema'] = schema_for(task.form_type)
-        if task.form_type == FormType.ATTACHMENT_5:
+        payload['schema']['campaign_year'] = context.get('campaign_year') or campaign.year
+        if task.form_type in {FormType.ATTACHMENT_5, FormType.INSPECTION_REVIEW}:
             payload['schema']['roster_people'] = context.get('roster_people') or []
         payload['context'] = context
         payload['payload'] = merge_payload(task.form_type, task.payload_json or {}, context)
@@ -309,6 +320,8 @@ def submit_task(task, user, payload):
     task.submitted_at = timezone.now()
     task.return_reason = ''
     task.save(update_fields=['payload_json', 'status', 'submitted_at', 'return_reason', 'updated_at'])
+    from .assessment_collection import sync_collection
+    sync_collection(task.campaign, user)
     return task
 
 
@@ -325,6 +338,8 @@ def return_task(task, operator, reason):
     task.returned_by = operator
     task.returned_at = timezone.now()
     task.save(update_fields=['status', 'submitted_at', 'return_reason', 'returned_by', 'returned_at', 'updated_at'])
+    from .assessment_collection import sync_collection
+    sync_collection(task.campaign, operator)
     return task
 
 

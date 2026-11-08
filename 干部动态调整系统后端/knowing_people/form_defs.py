@@ -1,6 +1,8 @@
 """知事识人各附件的栏目定义、默认值和提交校验。"""
 
 from copy import deepcopy
+from datetime import date
+import re
 
 from rest_framework.exceptions import ValidationError
 
@@ -234,6 +236,11 @@ FORM_META = [
         'auto_dispatch': False, 'manual_only': True,
         'rule': '样例表。下发对象由管理员选择。',
     },
+    {
+        'key': FormType.INSPECTION_REVIEW, 'short_label': '考察组记录',
+        'auto_dispatch': False, 'manual_only': True,
+        'rule': '补充收集现场谈话、能力评价和存在不足，由管理员指定考察组填报人及被考察支部。',
+    },
 ]
 
 FORM_META_MAP = {item['key']: item for item in FORM_META}
@@ -243,6 +250,7 @@ RULES_TEXT = (
     '默认下发给党支部书记；附件6-1、7-1、7-2 下发给党支部书记；附件6-2 下发给本支部民警职工；'
     '附件7-4 下发给支委和除支委外的全体民警职工。附件7-3、附件1 不按附件8自动全员下发，需管理员勾选。'
     '被评对象尽量从花名册、组织树带入。提交后只读，管理员可退回重填。'
+    '考察组谈话及研判记录需指定考察组填报人和被考察支部，可分别记录班子及具体干部。'
 )
 
 
@@ -373,11 +381,22 @@ def default_payload(form_type, context=None):
             'branch_name': branch.get('name') or '',
             'fill_date': '',
             'works': [{
+                'year': context.get('campaign_year') or '',
                 'title': '',
                 'description': '',
                 'people': [{'name': '', 'roles': [], 'task_and_role': ''}],
             }],
             'prefill_fields': ['branch_name'],
+        }
+
+    if form_type == FormType.INSPECTION_REVIEW:
+        return {
+            'branch_name': branch.get('name') or '',
+            'material_year': context.get('campaign_year') or '',
+            'record_date': '',
+            'interviewers': '',
+            'records': [{'roster_id': '', 'name': branch.get('name') or '',
+                         'talk_notes': '', 'ability_assessment': '', 'shortcomings': ''}],
         }
 
     if form_type == FormType.ATTACHMENT_6_1:
@@ -455,7 +474,11 @@ def merge_payload(form_type, stored, context):
     if not stored:
         return base
     merged = deepcopy(base)
-    merged.update(stored)
+    merged.update(deepcopy(stored))
+    if form_type == FormType.ATTACHMENT_5:
+        for work in merged.get('works') or []:
+            if isinstance(work, dict):
+                work.setdefault('year', context.get('campaign_year') or '')
     if form_type == FormType.ATTACHMENT_1:
         allowed = {row['key'] for row in TALK_OVERALL}
         legacy = [row for row in (stored.get('overall') or []) if row.get('key') not in allowed]
@@ -560,8 +583,8 @@ def validate_payload(form_type, payload, *, strict=False):
             *[(label, (payload.get('experience_counts') or {}).get(key)) for key, label in
               [('office', '长期在机关人数'), ('balanced', '相对均衡人数'), ('prison', '长期在监区人数')]],
         ]:
-            if value is not None and value != '':
-                _require(isinstance(value, int) and not isinstance(value, bool) and value >= 0, f'「{label}」须为非负整数。')
+            _require(value is not None and value != '', f'请填写「{label}」，没有则填 0。')
+            _require(isinstance(value, int) and not isinstance(value, bool) and value >= 0, f'「{label}」须为非负整数。')
         _require((payload.get('branch_name') or '').strip(), '请填写党支部名称。')
         items = payload.get('items') or []
         for spec in TEAM_EVAL_ITEMS:
@@ -571,14 +594,30 @@ def validate_payload(form_type, payload, *, strict=False):
 
     elif form_type == FormType.ATTACHMENT_5:
         _require((payload.get('branch_name') or '').strip(), '请填写党支部名称。')
-        works = [row for row in (payload.get('works') or []) if isinstance(row, dict) and (row.get('title') or '').strip()]
+        works = payload.get('works') or []
         _require(works, '请至少填写一条重点工作。')
         for work in works:
-            people = [p for p in (work.get('people') or []) if isinstance(p, dict) and (p.get('name') or '').strip()]
+            _require((work.get('title') or '').strip(), '请填写每条重点工作的名称，空白行可删除。')
+            _require(re.fullmatch(r'[1-9]\d{3}', str(work.get('year') or '')), '请为每项重点工作填写四位材料年度。')
+            _require((work.get('description') or '').strip(), f'请填写「{work["title"]}」的简要表述。')
+            people = work.get('people') or []
             _require(people, f'「{work["title"]}」下请至少填写一名具体人员。')
             for person in people:
+                _require((person.get('name') or '').strip(), '请填写或选择每条人员记录的姓名，空白行可删除。')
                 _require(isinstance(person.get('roles'), list) and person['roles'] and all(role in ROLES for role in person['roles']), f'请为 {person.get("name")} 选择有效的承担角色。')
                 _require((person.get('task_and_role') or '').strip(), f'请填写 {person.get("name")} 的具体任务和作用发挥。')
+
+    elif form_type == FormType.INSPECTION_REVIEW:
+        _require(re.fullmatch(r'[1-9]\d{3}', str(payload.get('material_year') or '')), '请填写四位材料年度。')
+        try:
+            date.fromisoformat(payload.get('record_date') or '')
+        except (ValueError, TypeError):
+            raise ValidationError('请选择有效的记录日期。')
+        _require((payload.get('interviewers') or '').strip(), '请填写考察组或谈话人员。')
+        _require(payload.get('records'), '请至少录入一条谈话或研判记录。')
+        for row in payload['records']:
+            _require(any((row.get(key) or '').strip() for key in ('talk_notes', 'ability_assessment', 'shortcomings')),
+                     '每条记录至少填写谈话内容、能力评价、存在不足中的一项，空白记录可删除。')
 
     elif form_type == FormType.ATTACHMENT_6_1:
         _validate_matrix(payload.get('targets') or [], TEAM_DIMENSIONS, '党支部')

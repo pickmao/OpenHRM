@@ -3,12 +3,12 @@
     <a-row :gutter="16">
       <a-col :span="12"><a-form-item label="党支部（盖章位可用单位名）" required><a-input v-model:value="payload.branch_name" :disabled="readonly" /><a-tag v-if="prefill('branch_name')" color="blue">组织树</a-tag></a-form-item></a-col>
       <a-col :span="12"><a-form-item label="评价时间"><a-date-picker v-model:value="payload.eval_date" value-format="YYYY-MM-DD" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
-      <a-col :span="6"><a-form-item label="监区/部门领导现有人数"><a-input-number v-model:value="payload.leadership_current" :min="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
-      <a-col :span="6"><a-form-item label="领导空缺人数"><a-input-number v-model:value="payload.leadership_vacancy" :min="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
-      <a-col :span="6"><a-form-item label="工作团队负责人现有"><a-input-number v-model:value="payload.team_leader_current" :min="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
-      <a-col :span="6"><a-form-item label="团队负责人空缺"><a-input-number v-model:value="payload.team_leader_vacancy" :min="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
+      <a-col :span="6"><a-form-item label="监区/部门领导现有人数" required><a-input-number v-model:value="payload.leadership_current" :min="0" :precision="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
+      <a-col :span="6"><a-form-item label="领导空缺人数" required><a-input-number v-model:value="payload.leadership_vacancy" :min="0" :precision="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
+      <a-col :span="6"><a-form-item label="工作团队负责人现有" required><a-input-number v-model:value="payload.team_leader_current" :min="0" :precision="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
+      <a-col :span="6"><a-form-item label="团队负责人空缺" required><a-input-number v-model:value="payload.team_leader_vacancy" :min="0" :precision="0" style="width:100%" :disabled="readonly" /></a-form-item></a-col>
       <a-col :span="24">
-        <a-form-item label="班子阅历结构（人）">
+        <a-form-item label="班子阅历结构（人）" required>
           <a-space wrap>
             <label v-for="item in experienceFields" :key="item.key">{{ item.label }}
               <a-input-number v-model:value="payload.experience_counts[item.key]" :min="0" :precision="0" :disabled="readonly" />

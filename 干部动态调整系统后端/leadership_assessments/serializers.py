@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import LeadershipAssessmentFile, LeadershipAssessmentRecord
+from assessments.serializers import validate_annual_performance
 
 
 class LeadershipFileSerializer(serializers.ModelSerializer):
@@ -21,10 +22,13 @@ class LeadershipRecordSerializer(serializers.ModelSerializer):
     file_name = serializers.CharField(source='file.file_name', read_only=True)
     version_date = serializers.DateField(source='file.version_date', read_only=True)
 
+    def validate_performance_by_year(self, value):
+        return validate_annual_performance(value)
+
     class Meta:
         model = LeadershipAssessmentRecord
         fields = '__all__'
-        read_only_fields = ('id', 'file', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'file', 'created_at', 'updated_at', 'source_object_id', 'collection_data')
 
 
 class LeadershipRecordListSerializer(LeadershipRecordSerializer):

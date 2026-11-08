@@ -28,6 +28,13 @@
           <a-col :span="12"><a-form-item label="年度"><a-input v-model:value="form.year" placeholder="2026" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="考察开始日期"><a-date-picker v-model:value="form.periodStart" style="width:100%" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="考察结束日期"><a-date-picker v-model:value="form.periodEnd" style="width:100%" /></a-form-item></a-col>
+          <a-col v-if="options.can_collect_assessments" :span="24">
+            <a-form-item label="填报数据归集到研判表">
+              <a-checkbox v-model:checked="form.collectAssessments">提交后自动归集</a-checkbox>
+              <a-input v-if="form.collectAssessments" v-model:value="form.assessmentDate" type="date" style="width:180px;margin-left:16px" />
+              <div class="hint">选择研判期间及客观指标统计截止日。可在填报进度中核对成员范围与归集设置。</div>
+            </a-form-item>
+          </a-col>
           <a-col :span="24"><a-form-item label="说明"><a-textarea v-model:value="form.description" :rows="2" :maxlength="2000" show-count /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="截止时间" required><a-date-picker v-model:value="form.deadlineAt" show-time style="width:100%" /></a-form-item></a-col>
           <a-col :span="12">
@@ -52,6 +59,9 @@
         </a-form-item>
         <a-form-item v-if="form.formTypes.includes('ATTACHMENT_1')" label="附件1 谈话测评填报人">
           <a-select v-model:value="form.extra1" mode="multiple" show-search option-filter-prop="label" :options="userOptions" placeholder="由管理员指定谈话人员" />
+        </a-form-item>
+        <a-form-item v-if="form.formTypes.includes('INSPECTION_REVIEW')" label="考察组谈话及研判记录填报人">
+          <a-select v-model:value="form.extraReview" mode="multiple" show-search option-filter-prop="label" :options="userOptions" placeholder="指定考察组人员，并在上方选择被考察支部" />
         </a-form-item>
       </a-form>
       <a-space class="preview-bar">
@@ -111,11 +121,14 @@ const newForm = () => ({
   description: '',
   periodStart: null,
   periodEnd: null,
+  collectAssessments: true,
+  assessmentDate: '',
   deadlineAt: null,
   formTypes: ['ATTACHMENT_2', 'ATTACHMENT_3'],
   branchIds: [],
   extra73: [],
-  extra1: []
+  extra1: [],
+  extraReview: []
 })
 const form = reactive(newForm())
 const columns = [
@@ -137,7 +150,7 @@ const previewColumns = [
 ]
 const formTypes = computed(() => options.value.form_types || [])
 const roleOptions = computed(() => (options.value.filler_roles || []).map(item => ({ value: item.key, label: item.label })))
-watch(() => [form.formTypes, form.branchIds, form.extra73, form.extra1], () => { previewData.value = null }, { deep: true })
+watch(() => [form.formTypes, form.branchIds, form.extra73, form.extra1, form.extraReview], () => { previewData.value = null }, { deep: true })
 const userOptions = computed(() => (options.value.users || []).map(user => ({ value: user.id, label: `${user.real_name || user.username}（${user.username}）` })))
 const branchOptions = computed(() => (options.value.branches || []).map(unit => ({ value: unit.id, label: unit.label || unit.name })))
 const selectedTypeOptions = computed(() => formTypes.value.filter(item => form.formTypes.includes(item.key)).map(item => ({ value: item.key, label: item.label })))
@@ -171,6 +184,7 @@ const extraByType = () => {
   const extra = {}
   if (form.extra73.length) extra.ATTACHMENT_7_3 = form.extra73
   if (form.extra1.length) extra.ATTACHMENT_1 = form.extra1
+  if (form.extraReview.length) extra.INSPECTION_REVIEW = form.extraReview
   return extra
 }
 const basePayload = () => ({
@@ -179,6 +193,7 @@ const basePayload = () => ({
   description: form.description.trim(),
   period_start: form.periodStart ? dayjs(form.periodStart).format('YYYY-MM-DD') : null,
   period_end: form.periodEnd ? dayjs(form.periodEnd).format('YYYY-MM-DD') : null,
+  assessment_date: options.value.can_collect_assessments && form.collectAssessments ? form.assessmentDate || null : null,
   deadline_at: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : undefined,
   form_types: [...form.formTypes],
   branch_ids: [...form.branchIds],
@@ -219,6 +234,7 @@ const addRecipient = () => {
 const create = async () => {
   if (!form.name.trim() || !form.deadlineAt) return message.warning('请填写批次名称和截止时间')
   if (!form.formTypes.length) return message.warning('请勾选至少一种表单')
+  if (options.value.can_collect_assessments && form.collectAssessments && !form.assessmentDate) return message.warning('请选择自动归入的研判期间')
   if (!previewData.value) return message.warning('请先按附件8预览并核对名单')
   saving.value = true
   try {

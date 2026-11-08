@@ -10,11 +10,17 @@
         重点工作 {{ wIndex + 1 }}
         <a-button v-if="!readonly" type="link" danger @click="removeWork(wIndex)">删除该工作</a-button>
       </div>
+      <a-form-item label="材料年度" required><a-date-picker v-model:value="work.year" picker="year" value-format="YYYY" :disabled="readonly" placeholder="该项工作发生的年度" /></a-form-item>
       <a-form-item label="重点工作名称"><a-input v-model:value="work.title" :disabled="readonly" /></a-form-item>
       <a-form-item label="简要表述"><a-textarea v-model:value="work.description" :rows="3" :disabled="readonly" /></a-form-item>
       <div v-for="(person, pIndex) in work.people" :key="pIndex" class="person-block">
         <a-row :gutter="12">
-          <a-col :span="8"><a-form-item label="具体人员"><a-auto-complete v-model:value="person.name" :options="peopleOptions" :filter-option="filterPerson" :disabled="readonly" placeholder="选择本支部人员或输入姓名" style="width:100%" /></a-form-item></a-col>
+          <a-col :span="8">
+            <a-form-item label="具体人员" required>
+              <a-select :value="person.roster_id || undefined" :options="peopleOptions" show-search option-filter-prop="label" allow-clear :disabled="readonly" placeholder="选择本支部花名册人员" style="width:100%" @change="value => selectPerson(person, value)" />
+              <a-input v-if="!person.roster_id" v-model:value="person.name" :disabled="readonly" placeholder="未列入花名册的人员可填姓名，待核对身份" style="margin-top:8px" />
+            </a-form-item>
+          </a-col>
           <a-col :span="12">
             <a-form-item label="承担角色">
               <a-checkbox-group v-model:value="person.roles" :disabled="readonly" :options="schema.roles || ['主导者', '协助者', '执行者']" />
@@ -35,11 +41,14 @@
 <script setup>
 import { computed } from 'vue'
 const props = defineProps({ payload: { type: Object, required: true }, schema: { type: Object, default: () => ({}) }, readonly: Boolean })
-const peopleOptions = computed(() => (props.schema.roster_people || []).map(person => ({ value: person.name, label: `${person.name}（${person.department}）` })))
-const filterPerson = (input, option) => option.label.includes(input)
+const peopleOptions = computed(() => (props.schema.roster_people || []).map(person => ({ value: person.id, label: `${person.name}（${person.department} · ${person.position || '职务未填'}）` })))
+const selectPerson = (person, value) => {
+  const selected = (props.schema.roster_people || []).find(item => item.id === value)
+  Object.assign(person, { roster_id: selected?.id || '', name: selected?.name || person.name || '', department: selected?.department || '' })
+}
 const prefill = key => (props.payload.prefill_fields || []).includes(key)
 const addWork = () => {
-  props.payload.works = [...(props.payload.works || []), { title: '', description: '', people: [{ name: '', roles: [], task_and_role: '' }] }]
+  props.payload.works = [...(props.payload.works || []), { year: props.schema.campaign_year || '', title: '', description: '', people: [{ name: '', roles: [], task_and_role: '' }] }]
 }
 const removeWork = index => props.payload.works.splice(index, 1)
 const addPerson = work => { work.people = [...(work.people || []), { name: '', roles: [], task_and_role: '' }] }

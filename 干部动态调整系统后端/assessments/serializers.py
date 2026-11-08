@@ -1,8 +1,16 @@
 from rest_framework import serializers
+import re
 
 from cadres.org_alignment import roster_department_by_names
 
 from .models import AssessmentFile, AssessmentRecord
+
+
+def validate_annual_performance(value):
+    if not isinstance(value, dict) or any(not re.fullmatch(r'[1-9]\d{3}', str(year)) or not isinstance(text, str)
+                                          for year, text in value.items()):
+        raise serializers.ValidationError('年度干事评价须按四位年度保存文字内容。')
+    return value
 
 
 class AssessmentFileSerializer(serializers.ModelSerializer):
@@ -25,10 +33,13 @@ class AssessmentRecordSerializer(serializers.ModelSerializer):
     position_category_display = serializers.CharField(source='get_position_category_display', read_only=True)
     current_department = serializers.SerializerMethodField()
 
+    def validate_performance_by_year(self, value):
+        return validate_annual_performance(value)
+
     class Meta:
         model = AssessmentRecord
         fields = '__all__'
-        read_only_fields = ('id', 'file', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'file', 'created_at', 'updated_at', 'source_object_id', 'collection_data')
 
     def get_current_department(self, obj):
         mapping = self.context.get('roster_departments')
@@ -42,7 +53,7 @@ class AssessmentRecordListSerializer(AssessmentRecordSerializer):
     class Meta(AssessmentRecordSerializer.Meta):
         fields = ('id', 'file', 'file_name', 'version_date', 'name', 'department', 'current_department', 'position',
                   'position_category', 'position_category_display', 'age', 'ranking',
-                  'comprehensive_score', 'adjustment_suggestion')
+                  'seven_looks_score', 'work_recognition_score', 'comprehensive_score', 'adjustment_suggestion')
 
 
 class AssessmentRecordDetailSerializer(AssessmentRecordSerializer):

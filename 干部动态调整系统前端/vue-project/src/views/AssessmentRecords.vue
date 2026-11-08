@@ -1,6 +1,6 @@
 <template>
   <div class="page-shell">
-    <a-page-header title="中层领导干部分析研判" sub-title="按研判期间选择版本；进入记录后可逐条勘误，原始 Excel 永久留存" />
+    <a-page-header title="中层领导干部分析研判" sub-title="按研判期间查看上传或填报归集的数据，可逐条核对修改。" />
     <a-card size="small" class="toolbar">
       <a-space wrap>
         <a-select v-model:value="filters.file" allow-clear placeholder="选择研判期间" style="width: 340px" :options="fileOptions" @change="loadRecords" />
@@ -36,10 +36,10 @@
         </a-collapse-panel>
       </a-collapse>
       <a-descriptions v-if="detail && !editing" bordered size="small" :column="2">
-        <a-descriptions-item v-for="field in fields" :key="field.key" :label="field.label" :span="field.type === 'textarea' ? 2 : 1">{{ displayValue(detail[field.key], field) }}</a-descriptions-item>
+        <a-descriptions-item v-for="field in fields" :key="field.key" :label="field.label" :span="field.type === 'textarea' ? 2 : 1"><div class="assessment-value">{{ displayValue(detail[field.key], field) }}</div></a-descriptions-item>
       </a-descriptions>
       <a-form v-else-if="editing" layout="vertical"><a-row :gutter="16"><a-col v-for="field in fields" :key="field.key" :span="field.type === 'textarea' ? 24 : 12"><a-form-item :label="field.label"><a-select v-if="field.type === 'select'" v-model:value="editForm[field.key]" :options="categoryOptions" /><a-input v-else-if="field.type === 'date'" v-model:value="editForm[field.key]" type="date" /><a-input-number v-else-if="field.type === 'number'" v-model:value="editForm[field.key]" style="width: 100%" /><a-textarea v-else-if="field.type === 'textarea'" v-model:value="editForm[field.key]" :rows="3" /><a-input v-else v-model:value="editForm[field.key]" /></a-form-item></a-col></a-row></a-form>
-    </a-drawer>
+    <AssessmentCollectedFields v-if="detail" :record="detail" :editing="editing" :annual="editForm.performance_by_year || {}" /></a-drawer>
   </div>
 </template>
 
@@ -49,6 +49,10 @@ import { message } from 'ant-design-vue'
 import { assessmentApi } from '@/api/assessments'
 import { useUserStore } from '@/stores/user'
 import { registerModelContextTools } from '@/utils/webmcp'
+import { useRoute } from 'vue-router'
+import AssessmentCollectedFields from '@/components/AssessmentCollectedFields.vue'
+
+const route = useRoute()
 
 const userStore = useUserStore(); const loading = ref(false); const files = ref([]); const records = ref([]); const detail = ref(null); const history = ref([]); const drawerOpen = ref(false); const editing = ref(false); const saving = ref(false); const uploadOpen = ref(false); const uploading = ref(false)
 const filters = reactive({ file: undefined, name: '', department: '', position_category: undefined }); const pagination = reactive({ current: 1, pageSize: 20, total: 0 }); const upload = reactive({ period: null, file: null }); const editForm = reactive({})
@@ -65,16 +69,16 @@ const recordUpdateSchema = {
   required: ['recordId', 'values'],
   additionalProperties: false,
 }
-const columns = [{ title: '姓名', dataIndex: 'name', width: 100 }, { title: '当前部门', dataIndex: 'current_department', width: 140 }, { title: '研判单位', dataIndex: 'department' }, { title: '职务', dataIndex: 'position' }, { title: '职务类别', key: 'category', width: 180 }, { title: '排名', dataIndex: 'ranking', width: 80 }, { title: '综合评分', key: 'score', width: 100 }, { title: '操作', key: 'action', width: 100 }]
+const columns = [{ title: '姓名', dataIndex: 'name', width: 100 }, { title: '当前部门', dataIndex: 'current_department', width: 140 }, { title: '研判单位', dataIndex: 'department' }, { title: '职务', dataIndex: 'position' }, { title: '职务类别', key: 'category', width: 180 }, { title: '排名', dataIndex: 'ranking', width: 80 }, { title: '七看评价', dataIndex: 'seven_looks_score', width: 100 }, { title: '工作认可度', dataIndex: 'work_recognition_score', width: 100 }, { title: '综合评分', key: 'score', width: 100 }, { title: '操作', key: 'action', width: 100 }]
 const categoryOptions = [['SECTION_CHIEF', '科室正职（含企业）'], ['SECTION_DEPUTY', '科室副职（含企业）'], ['INSTITUTION_2', '事业单位、群团组织、工作团队（二级）'], ['PRISON_WARDEN', '监区长'], ['INSTRUCTOR', '教导员'], ['DEPUTY_PRISON', '副区（狱政）'], ['DEPUTY_PRODUCTION', '副区（生产）'], ['DEPUTY_EDUCATION', '副区（教育）'], ['PRISON_TEAM', '监区工作团队']].map(([value, label]) => ({ value, label }))
 const fileOptions = computed(() => files.value.map(item => ({ value: item.id, label: `${item.version_date} · ${item.file_name}` }))); const selectedFile = computed(() => files.value.find(item => item.id === filters.file))
 const loadFiles = async () => { const data = await assessmentApi.getFiles(); files.value = data.results || data }
 const loadRecords = async () => { loading.value = true; try { const data = await assessmentApi.getRecords({ ...filters, page: pagination.current, page_size: pagination.pageSize }); records.value = data.results || data; pagination.total = data.count || records.value.length } finally { loading.value = false } }
 const search = async () => { pagination.current = 1; await loadRecords() }; const onTableChange = page => { pagination.current = page.current; pagination.pageSize = page.pageSize; loadRecords() }
 const openRecord = async record => { [detail.value, history.value] = await Promise.all([assessmentApi.getRecord(record.id), assessmentApi.getRecordHistory(record.id)]); editing.value = false; drawerOpen.value = true }
-const startEdit = () => { fields.forEach(field => { editForm[field.key] = detail.value[field.key] }); editing.value = true }
+const startEdit = () => { fields.forEach(field => { editForm[field.key] = detail.value[field.key] }); editForm.performance_by_year = { ...(detail.value.performance_by_year || {}) }; editing.value = true }
 const displayValue = (value, field) => field.type === 'select' ? categoryOptions.find(item => item.value === value)?.label || value || '-' : value ?? '-'
-const saveRecord = async () => { saving.value = true; try { const data = Object.fromEntries(fields.map(field => [field.key, editForm[field.key]])); detail.value = await assessmentApi.updateRecord(detail.value.id, data); history.value = await assessmentApi.getRecordHistory(detail.value.id); editing.value = false; message.success('记录已修改并已留痕'); loadRecords() } finally { saving.value = false } }
+const saveRecord = async () => { saving.value = true; try { const data = Object.fromEntries([...fields.map(field => [field.key, editForm[field.key]]), ['performance_by_year', editForm.performance_by_year]].filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(detail.value[key]))); detail.value = await assessmentApi.updateRecord(detail.value.id, data); history.value = await assessmentApi.getRecordHistory(detail.value.id); editing.value = false; message.success('记录已修改并已留痕'); loadRecords() } finally { saving.value = false } }
 const showHistory = item => message.info(`修改前：${JSON.stringify(item.before_values)}\n修改后：${JSON.stringify(item.after_values)}`, 8)
 const captureFile = file => { upload.file = file; const match = file.name.match(/(\d{4})(\d{2})(\d{2})/); if (match && !upload.period) upload.period = `${match[1]}-${match[2]}-${match[3]}`; return false }; const clearFile = () => { upload.file = null }; const resetUpload = () => { upload.period = null; upload.file = null }
 const submitUpload = async () => {
@@ -179,8 +183,8 @@ const registerUploadTools = () => {
   ])
 }
 
-onMounted(async () => { registerUploadTools(); await loadFiles(); await loadRecords() })
+onMounted(async () => { registerUploadTools(); await loadFiles(); filters.file = route.query.file || filters.file; await loadRecords() })
 onUnmounted(() => unregisterWebMcpTools())
 </script>
 
-<style scoped>.page-shell { padding: 8px 0; }.toolbar, .version-alert, .history { margin-bottom: 16px; }.hint { margin-top: 6px; color: #8c8c8c; font-size: 12px; }.drawer-actions { margin-bottom: 16px; }</style>
+<style scoped>.page-shell { padding: 8px 0; }.toolbar, .version-alert, .history { margin-bottom: 16px; }.hint { margin-top: 6px; color: #8c8c8c; font-size: 12px; }.drawer-actions { margin-bottom: 16px; }.assessment-value { white-space: pre-wrap; overflow-wrap: anywhere; }</style>

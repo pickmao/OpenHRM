@@ -36,6 +36,7 @@ class CampaignCreateSerializer(serializers.Serializer):
     branch_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
     extra_user_ids_by_type = serializers.DictField(child=serializers.ListField(child=serializers.UUIDField()), required=False)
     recipients = RecipientOverrideSerializer(many=True, required=False)
+    assessment_date = serializers.DateField(required=False, allow_null=True)
 
     def validate(self, attrs):
         if attrs['deadline_at'] <= timezone.now():
@@ -55,3 +56,11 @@ class TaskSaveSerializer(serializers.Serializer):
 
 class ReturnSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=500)
+
+
+class AssessmentCollectionSerializer(serializers.Serializer):
+    version_date = serializers.DateField()
+    include_team_leaders = serializers.BooleanField(default=True)
+    include_designated_leaders = serializers.BooleanField(default=False)
+    approval_rule = serializers.ChoiceField(choices=['UNCONFIRMED', 'RECOGNIZED', 'RECOGNIZED_AND_BASIC'], default='UNCONFIRMED')
+    member_ids = serializers.DictField(child=serializers.ListField(child=serializers.UUIDField()), required=False)

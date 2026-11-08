@@ -1,9 +1,11 @@
 import re
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from .models import Role, UserRole
+from .models import DataScope, Role, ScopeType, UserRole
 from .permission_catalog import is_valid_permission_code
 
 
@@ -53,6 +55,46 @@ class AdminUserListSerializer(serializers.ModelSerializer):
             {'id': str(item.role_id), 'code': item.role.code, 'name': item.role.name}
             for item in user.user_roles.select_related('role').filter(role__is_active=True)
         ]
+
+
+class AdminUserCreateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, trim_whitespace=False, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    class Meta:
+        model = User
+        fields = ['username', 'real_name', 'password', 'confirm_password']
+        extra_kwargs = {
+            'username': {'min_length': 3, 'max_length': 150},
+            'real_name': {'allow_blank': False, 'required': True},
+        }
+
+    def validate(self, attrs):
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({'detail': '只能创建普通用户，请勿传入角色或管理员权限字段'})
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({'confirm_password': '两次输入的密码不一致'})
+        try:
+            validate_password(attrs['password'], User(username=attrs['username'], real_name=attrs['real_name']))
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({'password': error.messages})
+        if not Role.objects.filter(code=Role.CADRE_SELF, is_active=True).exists():
+            raise serializers.ValidationError({'detail': '默认的本人账号角色不可用，请先启用该角色'})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        user = User.objects.create_user(
+            **validated_data, is_staff=False, is_superuser=False,
+            is_active=True, account_status=User.AccountStatus.ACTIVE,
+        )
+        UserRole.objects.create(
+            user=user, role=Role.objects.get(code=Role.CADRE_SELF, is_active=True),
+            assigned_by=self.context['request'].user,
+        )
+        DataScope.objects.create(user=user, scope_type=ScopeType.SELF)
+        return user
 
 
 class UserRolesSerializer(serializers.Serializer):

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
+from django.db import transaction
 
 from .models import AssessmentChangeLog
 
@@ -11,8 +12,10 @@ def _json_value(value):
     return value
 
 
+@transaction.atomic
 def record_change(*, instance, validated_data, user, resource_type):
     """保存记录前后仅发生变化字段的快照，供审计和追溯使用。"""
+    instance = type(instance).objects.select_for_update().select_related('file').get(pk=instance.pk)
     field_names = list(validated_data.keys())
     before_values = {field: _json_value(getattr(instance, field)) for field in field_names}
     for field, value in validated_data.items():

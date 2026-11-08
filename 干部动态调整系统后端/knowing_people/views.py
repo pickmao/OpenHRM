@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from .form_defs import RULES_TEXT, form_catalog
 from .models import InspectionCampaign, InspectionTask
 from .permissions import has_knowing_people_permission
-from .serializers import CampaignCreateSerializer, CampaignPreviewSerializer, ReturnSerializer, TaskSaveSerializer
+from .serializers import AssessmentCollectionSerializer, CampaignCreateSerializer, CampaignPreviewSerializer, ReturnSerializer, TaskSaveSerializer
 from .services import (
     MANAGE_PERMISSION, RESULT_PERMISSION, TASK_SUBMIT_PERMISSION, TASK_VIEW_PERMISSION,
     build_statistics, campaign_summary, close_campaign, create_campaign, dispatch_options,
@@ -30,6 +30,8 @@ class DispatchOptionsView(APIView):
         if denied:
             return denied
         payload = dispatch_options()
+        from .assessment_collection import can_configure_collection
+        payload['can_collect_assessments'] = can_configure_collection(request.user)
         payload['catalog'] = form_catalog()
         payload['rules_text'] = RULES_TEXT
         return Response(payload)
@@ -127,6 +129,43 @@ class CampaignStatisticsExportView(APIView):
         response = HttpResponse(statistics_workbook(campaign), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = 'attachment; filename="knowing-people-statistics.xlsx"'
         return response
+
+
+class CampaignMaterialsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, campaign_id):
+        denied = require_any(request, MANAGE_PERMISSION, RESULT_PERMISSION)
+        if denied:
+            return denied
+        from .materials import build_materials
+        campaign = get_object_or_404(InspectionCampaign, id=campaign_id)
+        data = build_materials(campaign)
+        data['can_view_source'] = has_knowing_people_permission(request.user, MANAGE_PERMISSION)
+        return Response(data)
+
+
+class CampaignAssessmentCollectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, campaign_id):
+        denied = require_any(request, MANAGE_PERMISSION, RESULT_PERMISSION)
+        if denied:
+            return denied
+        from .assessment_collection import can_configure_collection, collection_summary
+        from .models import AssessmentCollection
+        campaign = get_object_or_404(InspectionCampaign, id=campaign_id)
+        link = AssessmentCollection.objects.select_related('leadership_file', 'cadre_file').filter(campaign=campaign).first()
+        return Response({'collection': collection_summary(link), 'can_configure': can_configure_collection(request.user)})
+
+    def post(self, request, campaign_id):
+        from .assessment_collection import can_configure_collection, configure_collection
+        if not can_configure_collection(request.user):
+            return Response({'detail': '关联归集需要知事识人管理及班子、干部研判维护权限。'}, status=status.HTTP_403_FORBIDDEN)
+        campaign = get_object_or_404(InspectionCampaign, id=campaign_id)
+        serializer = AssessmentCollectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(configure_collection(campaign, request.user, serializer.validated_data))
 
 
 class TaskDetailView(APIView):

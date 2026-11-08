@@ -13,6 +13,8 @@
       <a-empty v-if="!campaignId" description="请选择一个考察批次" />
       <template v-else>
         <a-alert type="info" show-icon class="summary" :message="summaryText" />
+        <AssessmentCollection ref="collectionRef" :campaign-id="campaignId" :period-end="progress?.period_end || ''" />
+        <ReviewMaterials ref="materialsRef" :campaign-id="campaignId" />
         <a-row :gutter="16" class="stat-row">
           <a-col :span="12">
             <h4>按表单</h4>
@@ -61,12 +63,16 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { knowingPeopleApi } from '@/api/knowingPeople'
+import ReviewMaterials from './ReviewMaterials.vue'
+import AssessmentCollection from './AssessmentCollection.vue'
 
 const route = useRoute()
 const router = useRouter()
 const campaigns = ref([])
 const campaignId = ref(route.query.campaign || undefined)
 const progress = ref(null)
+const materialsRef = ref(null)
+const collectionRef = ref(null)
 const loading = ref(false)
 const exporting = ref(false)
 const formType = ref(undefined)
@@ -185,6 +191,8 @@ const confirmReturn = async () => {
     message.success('已退回')
     returnOpen.value = false
     await loadProgress()
+    await materialsRef.value?.refresh()
+    await collectionRef.value?.refresh()
   } catch (error) {
     message.error(error.response?.data?.detail || '退回失败')
   }

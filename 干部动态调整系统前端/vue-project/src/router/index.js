@@ -113,7 +113,7 @@ const routes = [
         path: 'admin/users/roles',
         name: 'AdminUserRoles',
         component: () => import('@/views/admin/UserRoles.vue'),
-        meta: { requiresAuth: true, title: '用户角色分配', menuKey: 'system-user' }
+        meta: { requiresAuth: true, title: '用户管理', menuKey: 'system-user' }
       },
       {
         path: 'forms/dispatch',

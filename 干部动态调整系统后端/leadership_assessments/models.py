@@ -78,6 +78,9 @@ class LeadershipAssessmentRecord(models.Model):
     approval_rate = models.FloatField(null=True, blank=True)
     ranking = models.IntegerField(null=True, blank=True, db_index=True)
     adjustment_suggestion = models.TextField(blank=True)
+    performance_by_year = models.JSONField('其他年度干事评价', default=dict, blank=True)
+    source_object_id = models.UUIDField('来源班子编号', null=True, blank=True, db_index=True)
+    collection_data = models.JSONField('填报归集来源', default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

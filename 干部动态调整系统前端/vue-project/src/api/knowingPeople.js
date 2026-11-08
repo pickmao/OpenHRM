@@ -22,6 +22,15 @@ export const knowingPeopleApi = {
   getStatisticsExport(id) {
     return request.get(`/knowing-people/campaigns/${id}/statistics-export/`, { responseType: 'blob' })
   },
+  getMaterials(id) {
+    return request.get(`/knowing-people/campaigns/${id}/materials/`)
+  },
+  getAssessmentCollection(id) {
+    return request.get(`/knowing-people/campaigns/${id}/assessment-collection/`)
+  },
+  collectAssessments(id, data) {
+    return request.post(`/knowing-people/campaigns/${id}/assessment-collection/`, data)
+  },
   getMyTasks() {
     return request.get('/knowing-people/tasks/my/')
   },

@@ -10,12 +10,12 @@ class AllFormsFlowTests(TestCase):
     setUp = existing_tests.KnowingPeopleApiTests.setUp
     dispatch = existing_tests.KnowingPeopleApiTests.dispatch
 
-    def test_all_eleven_forms_save_submit_reload_and_return(self):
+    def test_all_forms_save_submit_reload_and_return(self):
         campaign = self.dispatch(list(FormType.values), recipients=[
             {'form_type': form, 'user_id': str(self.middle.id), 'branch_id': str(self.branch.id)}
             for form in FormType.values
         ])
-        self.assertEqual(campaign['progress']['total'], 11)
+        self.assertEqual(campaign['progress']['total'], len(FormType.values))
         self.client.force_authenticate(self.middle)
         matrix_scores = dict.fromkeys(['political', 'integrity', 'responsibility', 'style', 'thinking', 'frontline', 'performance'], '良')
         talk_scores = dict.fromkeys(['belief', 'serve', 'diligent', 'courage', 'clean'], '优')
@@ -34,19 +34,23 @@ class AllFormsFlowTests(TestCase):
                     payload.update(signature='中层乙', fill_date='2026-09-22', items=[
                         dict(experience='本年度任职', key_work='重点工作', roles=['主导者', '执行者'], details='完成任务')])
                 elif task.form_type == 'ATTACHMENT_4':
+                    payload.update(leadership_current=1, leadership_vacancy=0, team_leader_current=1, team_leader_vacancy=0)
                     payload.update(experience_counts=dict(office=1, balanced=2, prison=3), rectification='整改措施',
                                    team_requests='班子诉求', adjustment_needed='是', adjustment_suggestion='调整建议')
                     for row in payload['items']:
                         row.update(grade='差', performance='按原表记录')
                 elif task.form_type == 'ATTACHMENT_5':
-                    payload['works'] = [dict(title='重点工作', description='工作简要表述', people=[
-                        dict(name='中层乙', roles=['主导者', '执行者'], task_and_role='具体任务')])]
+                    payload['works'] = [dict(year='2026', title='重点工作', description='工作简要表述', people=[
+                        dict(roster_id=str(self.chief_roster.id), name='中层乙', department='一监区办公室', roles=['主导者', '执行者'], task_and_role='具体任务')])]
                 elif task.form_type == 'ATTACHMENT_6_2':
                     payload.update(scores=dict(matrix_scores), recognition='不了解')
                 elif task.form_type == 'ATTACHMENT_1':
                     payload.update(personnel_category='党支部书记', branch_scores=dict(talk_scores))
                     for row in payload['overall']:
                         row['grade'] = '较好'
+                elif task.form_type == 'INSPECTION_REVIEW':
+                    payload.update(record_date='2026-11-07', interviewers='考察组', records=[
+                        dict(roster_id='', talk_notes='现场记录', ability_assessment='能力评价', shortcomings='改进事项')])
                 saved = self.client.post(url + 'save-draft/', {'payload': payload}, format='json')
                 self.assertEqual(saved.status_code, 200, saved.data)
                 submitted = self.client.post(url + 'submit/', {'payload': payload}, format='json')
@@ -60,7 +64,7 @@ class AllFormsFlowTests(TestCase):
         self.client.force_authenticate(self.admin)
         progress = self.client.get(f'/api/knowing-people/campaigns/{campaign["id"]}/progress/')
         self.assertEqual(progress.status_code, 200, progress.data)
-        self.assertEqual(progress.data['submitted_count'], 11)
+        self.assertEqual(progress.data['submitted_count'], len(FormType.values))
         export = self.client.get(f'/api/knowing-people/campaigns/{campaign["id"]}/statistics-export/')
         self.assertEqual(export.status_code, 200)
         self.assertTrue(export.content.startswith(b'PK'))
@@ -68,4 +72,4 @@ class AllFormsFlowTests(TestCase):
         returned = self.client.post(f'/api/knowing-people/tasks/{task.id}/return/', {'reason': '补充说明'}, format='json')
         self.assertEqual(returned.status_code, 200)
         progress = self.client.get(f'/api/knowing-people/campaigns/{campaign["id"]}/progress/')
-        self.assertEqual(progress.data['submitted_count'], 10)
+        self.assertEqual(progress.data['submitted_count'], len(FormType.values) - 1)

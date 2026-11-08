@@ -220,7 +220,7 @@ class AssessmentRecordViewSet(viewsets.ModelViewSet):
         return serializer
 
     def perform_update(self, serializer):
-        record_change(
+        serializer.instance = record_change(
             instance=serializer.instance,
             validated_data=serializer.validated_data,
             user=self.request.user,

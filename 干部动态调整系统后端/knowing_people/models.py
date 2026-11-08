@@ -30,6 +30,7 @@ class FormType(models.TextChoices):
     ATTACHMENT_7_3 = 'ATTACHMENT_7_3', '附件7-3 中层领导干部测评（评团队负责人）'
     ATTACHMENT_7_4 = 'ATTACHMENT_7_4', '附件7-4 中层领导干部测评（本支部干部）'
     ATTACHMENT_1 = 'ATTACHMENT_1', '附件1 谈话研判测评表'
+    INSPECTION_REVIEW = 'INSPECTION_REVIEW', '考察组谈话及研判记录'
 
 
 class FillerRole(models.TextChoices):
@@ -153,3 +154,18 @@ class InspectionTask(models.Model):
 
     def __str__(self):
         return f'{self.campaign.name} - {self.get_form_type_display()} - {self.assignee_name_snapshot}'
+
+
+class AssessmentCollection(models.Model):
+    campaign = models.OneToOneField(InspectionCampaign, on_delete=models.CASCADE, related_name='assessment_collection')
+    leadership_file = models.OneToOneField('leadership_assessments.LeadershipAssessmentFile', on_delete=models.CASCADE)
+    cadre_file = models.OneToOneField('assessments.AssessmentFile', on_delete=models.CASCADE)
+    include_team_leaders = models.BooleanField(default=True)
+    include_designated_leaders = models.BooleanField(default=False)
+    member_ids = models.JSONField('班子统计成员指定名单', default=dict, blank=True)
+    approval_rule = models.CharField(max_length=30, default='UNCONFIRMED', choices=[
+        ('UNCONFIRMED', '认可率口径待确认'), ('RECOGNIZED', '认可票 / 四档有效票'),
+        ('RECOGNIZED_AND_BASIC', '认可及基本认可票 / 四档有效票'),
+    ])
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    warnings = models.JSONField(default=list, blank=True)

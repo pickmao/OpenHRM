@@ -402,10 +402,17 @@ def match_form_type(form_type, *, branch_ids=None, extra_user_ids=None):
             if not members:
                 unmatched.append({'name': branch.name, 'department': branch.name, 'reason': '该支部没有可唯一匹配的在职成员账号'})
 
-    elif form_type in {FormType.ATTACHMENT_7_3, FormType.ATTACHMENT_1}:
+    elif form_type in {FormType.ATTACHMENT_7_3, FormType.ATTACHMENT_1, FormType.INSPECTION_REVIEW}:
         users = list(User.objects.filter(id__in=extra_user_ids, is_active=True).order_by('real_name', 'username'))
         role = FillerRole.POLITICAL_LEADER if form_type == FormType.ATTACHMENT_7_3 else FillerRole.INSPECTION_TALKER
         for user in users:
+            if form_type == FormType.INSPECTION_REVIEW and branch_ids:
+                for branch in branches:
+                    recipients.append(recipient_payload(
+                        user, form_type=form_type, filler_role=role, branch=branch,
+                        extra={'source': '管理员指定', 'auto': False},
+                    ))
+                continue
             recipients.append(recipient_payload(
                 user, form_type=form_type, filler_role=role, extra={'source': '管理员指定', 'auto': False},
             ))

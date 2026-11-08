@@ -29,6 +29,7 @@ import FormAttachment3 from './forms/FormAttachment3.vue'
 import FormAttachment4 from './forms/FormAttachment4.vue'
 import FormAttachment5 from './forms/FormAttachment5.vue'
 import FormMatrix from './forms/FormMatrix.vue'
+import FormInspectionReview from './forms/FormInspectionReview.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -48,6 +49,7 @@ const subTitle = computed(() => {
 const formComponent = computed(() => {
   const map = {
     ATTACHMENT_1: FormAttachment1,
+    INSPECTION_REVIEW: FormInspectionReview,
     ATTACHMENT_2: FormAttachment2,
     ATTACHMENT_3: FormAttachment3,
     ATTACHMENT_4: FormAttachment4,
