@@ -1,0 +1,73 @@
+.excel-form-page { padding: 8px 16px 24px; }
+.excel-form-page.is-expanded { position: fixed; inset: 0; z-index: 1000; overflow: auto; padding: 12px 24px 0; background: #f3f4f6; }
+.excel-form-page .notice { margin-bottom: 12px; }
+.excel-form-page .sheet-prefill-note { margin: 0 0 12px; color: #666; font-size: 12px; }
+.excel-form-page.is-expanded .ant-page-header { padding: 6px 0 14px; }
+.excel-form-page.is-expanded .sheet-paper { padding-top: 14px; }
+.excel-form-page .sheet-paper { padding: 22px 24px 28px; border: 1px solid #d9dde3; background: #fff; color: #222; }
+.excel-form-page .sheet-attachment { margin-bottom: 4px; font: 14px SimSun, 'Songti SC', serif; }
+.excel-form-page .sheet-title { margin: 0 0 20px; color: #111; font: 600 24px/1.5 SimSun, 'Songti SC', serif; text-align: center; letter-spacing: 1px; }
+.excel-form-page .sheet-subtitle { margin: 20px 0 12px; color: #111; font-size: 18px; text-align: center; }
+.excel-form-page .sheet-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 0 0 12px; }
+.excel-form-page .sheet-meta label { display: flex; align-items: center; gap: 8px; min-width: 240px; }
+.excel-form-page .sheet-meta label > span { flex-shrink: 0; }
+.excel-form-page .sheet-meta .ant-input, .excel-form-page .sheet-meta .ant-picker { width: 230px; border: 0; border-bottom: 1px solid #888; border-radius: 0; background: transparent; }
+.excel-form-page .sheet-scroll { overflow: auto; }
+.excel-form-page .sheet-grid { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1.5px solid #555; color: #222; font-size: 14px; }
+.excel-form-page .sheet-grid th, .excel-form-page .sheet-grid td { padding: 8px; border: 1px solid #777; background: #fff; text-align: center; vertical-align: middle; overflow-wrap: anywhere; }
+.excel-form-page .sheet-grid th { color: #222; font-weight: 500; }
+.excel-form-page .sheet-grid .content-cell { text-align: left; }
+.excel-form-page .sheet-grid .point-copy { font-size: 12px; line-height: 1.65; text-align: left; }
+.excel-form-page .sheet-grid .section-label { padding: 12px 8px; font-family: SimSun, 'Songti SC', serif; line-height: 1.7; }
+.excel-form-page .sheet-grid .vertical-label { writing-mode: vertical-rl; letter-spacing: 3px; }
+.excel-form-page .sheet-grid .category-cell { line-height: 1.9; }
+.excel-form-page .sheet-grid .choice-cell { padding: 0; }
+.excel-form-page .sheet-grid .choice-label { display: flex; justify-content: center; align-items: center; min-height: 42px; cursor: pointer; }
+.excel-form-page .sheet-radio, .excel-form-page .sheet-checkbox { width: 16px; height: 16px; margin: 8px 4px; accent-color: #1677ff; cursor: pointer; }
+.excel-form-page .sheet-radio:disabled, .excel-form-page .sheet-checkbox:disabled { opacity: 1; cursor: default; }
+.excel-form-page .sheet-radio:focus-visible, .excel-form-page .sheet-checkbox:focus-visible { outline: 2px solid #1677ff; outline-offset: 3px; }
+.excel-form-page .sheet-grid .ant-input, .excel-form-page .sheet-grid .ant-input-number, .excel-form-page .sheet-grid .ant-picker, .excel-form-page .sheet-grid .ant-select-selector { width: 100%; border: 1px solid transparent !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; }
+.excel-form-page .sheet-grid .ant-input:hover:not(:disabled), .excel-form-page .sheet-grid .ant-input-number:hover:not(.ant-input-number-disabled), .excel-form-page .sheet-grid .ant-picker:hover:not(.ant-picker-disabled), .excel-form-page .sheet-grid .ant-select:not(.ant-select-disabled):hover .ant-select-selector { border-color: #91caff !important; background: #f8fbff !important; }
+.excel-form-page .sheet-grid .ant-input:focus, .excel-form-page .sheet-grid .ant-input-number-focused, .excel-form-page .sheet-grid .ant-picker-focused, .excel-form-page .sheet-grid .ant-select-focused .ant-select-selector { border-color: #1677ff !important; }
+.excel-form-page .sheet-grid textarea.ant-input { min-height: 62px; padding: 5px 6px; line-height: 1.65; resize: vertical; }
+.excel-form-page .sheet-grid .ant-input-disabled, .excel-form-page .sheet-grid .ant-input-number-disabled, .excel-form-page .sheet-grid .ant-input-number-input:disabled, .excel-form-page .sheet-grid .ant-picker-disabled input, .excel-form-page .sheet-grid .ant-select-disabled .ant-select-selector { color: #303030 !important; -webkit-text-fill-color: #303030; cursor: default; }
+.excel-form-page .sheet-grid .ant-input-number-input { text-align: center; }
+.excel-form-page .sheet-grid .ant-select { width: 100%; text-align: left; }
+.excel-form-page .sheet-grid .ant-select-selection-item { white-space: normal; }
+.excel-form-page .sheet-grid .ant-checkbox-wrapper { color: #303030; }
+.excel-form-page .sheet-grid .roles-column .ant-checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+.excel-form-page .sheet-grid .roles-column .ant-checkbox-wrapper { margin-inline-start: 0; }
+.excel-form-page .sheet-note { margin: 12px 0 0; color: #666; font-size: 12px; line-height: 1.7; }
+.excel-form-page .cell-note { margin-top: 6px; color: #666; font-size: 12px; line-height: 1.5; }
+.excel-form-page .cell-label { display: block; margin: 4px 0 8px; color: #555; font-size: 12px; text-align: left; }
+.excel-form-page .cell-actions { margin-top: 8px; }
+.excel-form-page .sheet-row-actions { padding: 8px !important; text-align: left !important; }
+.excel-form-page .sheet-add { margin-top: 12px; }
+.excel-form-page .sheet-empty { padding: 24px !important; color: #777; }
+.excel-form-page .sheet-footer-grid { border-top: 0; }
+.excel-form-page .sheet-footer-grid th { width: 110px; }
+.excel-form-page .actions { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border: 1px solid #d9dde3; border-top: 0; background: #fff; }
+.excel-form-page .actions-hint { color: #777; font-size: 12px; }
+.excel-form-page .score-scroll { max-height: 72vh; }
+.excel-form-page.is-expanded .score-scroll { max-height: calc(100vh - 270px); }
+.excel-form-page .score-matrix thead { position: sticky; top: 0; z-index: 3; background: #fff; }
+.excel-form-page .score-matrix .matrix-index { position: sticky; left: 0; z-index: 2; background: #fff; }
+.excel-form-page .score-matrix .matrix-name { position: sticky; left: 42px; z-index: 2; background: #fff; }
+.excel-form-page .score-matrix thead .matrix-index, .excel-form-page .score-matrix thead .matrix-name { z-index: 4; }
+.excel-form-page .score-matrix .dimension-title { padding: 12px 4px; font-weight: 600; line-height: 1.6; }
+.excel-form-page .score-matrix .dimension-description { padding: 8px 6px; font-size: 11px; font-weight: 400; line-height: 1.6; text-align: left; }
+.excel-form-page .matrix-tools { display: flex; justify-content: flex-end; margin: 0 0 6px; }
+.excel-form-page .score-matrix .grade-heading { padding: 7px 0; font-size: 12px; }
+.excel-form-page .score-matrix .group-end { border-right: 2px solid #555; }
+.excel-form-page .score-matrix tbody tr:hover td { background: #f8fbff; }
+.excel-form-page .legacy-record { margin: 14px 0; padding: 10px 12px; border: 1px dashed #aaa; color: #666; font-size: 12px; }
+@media (max-width: 768px) {
+  .excel-form-page { padding: 8px; }
+  .excel-form-page.is-expanded { padding: 8px; }
+  .excel-form-page .sheet-paper { padding: 16px 12px; }
+  .excel-form-page .sheet-title { font-size: 21px; }
+  .excel-form-page .actions { padding: 12px; }
+  .excel-form-page .actions-hint { display: none; }
+  .excel-form-page .sheet-meta label { min-width: 0; width: 100%; }
+  .excel-form-page .sheet-meta .ant-input, .excel-form-page .sheet-meta .ant-picker { flex: 1; min-width: 0; }
+}

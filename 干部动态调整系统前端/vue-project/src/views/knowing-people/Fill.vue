@@ -1,19 +1,19 @@
 <template>
-  <div class="page-shell">
-    <a-page-header :title="task?.form_label || '知事识人填报'" :sub-title="subTitle" @back="() => router.push({ name: 'KnowingPeopleTasks' })" />
+  <div class="page-shell excel-form-page" :class="{ 'is-expanded': expanded }">
+    <a-page-header :title="task?.form_label || '知事识人填报'" :sub-title="subTitle" @back="() => router.push({ name: 'KnowingPeopleTasks' })"><template #extra><a-button v-if="task" @click="expanded = !expanded">{{ expanded ? '退出宽屏' : '宽屏填写' }}</a-button></template></a-page-header>
     <a-spin :spinning="loading">
       <a-alert v-if="task?.return_reason" type="warning" show-icon :message="'管理员退回：' + task.return_reason" class="notice" />
-      <a-alert v-if="task" type="info" show-icon :message="task.prefill_hint || '带花名册标记的字段来自人员库，可核对后修改。'" class="notice" />
-      <a-card v-if="task" :title="task.form_label" :bordered="false">
-        <component :is="formComponent" v-if="payload" :payload="payload" :schema="task.schema || {}" :readonly="readonly" :form-type="task.form_type" />
-        <div class="actions">
+      <p v-if="task && !readonly && !task.form_type.startsWith('ATTACHMENT_6') && !task.form_type.startsWith('ATTACHMENT_7')" class="sheet-prefill-note">基础信息已按任务名单和花名册预填，请在表内核对后填写。</p>
+      <template v-if="task">
+        <div class="sheet-paper"><component :is="formComponent" v-if="payload" :payload="payload" :schema="task.schema || {}" :readonly="readonly" :form-type="task.form_type" :filler-role="task.filler_role_label" /></div>
+        <div class="actions"><span class="actions-hint">{{ readonly ? '本表已提交，如需修改请联系管理员退回。' : '填写后可保存草稿，核对完成后提交。' }}</span>
           <a-space>
             <a-button v-if="!readonly" :loading="saving" @click="saveDraft">保存草稿</a-button>
             <a-button v-if="!readonly" type="primary" :loading="submitting" @click="submit">提交</a-button>
             <a-tag v-else color="green">{{ task.status_display }}</a-tag>
           </a-space>
         </div>
-      </a-card>
+      </template>
     </a-spin>
   </div>
 </template>
@@ -30,6 +30,7 @@ import FormAttachment4 from './forms/FormAttachment4.vue'
 import FormAttachment5 from './forms/FormAttachment5.vue'
 import FormMatrix from './forms/FormMatrix.vue'
 import FormInspectionReview from './forms/FormInspectionReview.vue'
+import './forms/excelForm.css'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +39,7 @@ const payload = ref(null)
 const loading = ref(false)
 const saving = ref(false)
 const submitting = ref(false)
+const expanded = ref(false)
 
 const readonly = computed(() => Boolean(task.value?.readonly || task.value?.status === 'SUBMITTED'))
 const subTitle = computed(() => {
@@ -114,9 +116,3 @@ const submit = async () => {
 
 onMounted(load)
 </script>
-
-<style scoped>
-.page-shell { padding: 8px 16px 24px; }
-.notice { margin-bottom: 16px; }
-.actions { margin-top: 16px; }
-</style>
