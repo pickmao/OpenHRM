@@ -12,6 +12,7 @@
 .excel-form-page .sheet-meta label { display: flex; align-items: center; gap: 8px; min-width: 240px; }
 .excel-form-page .sheet-meta label > span { flex-shrink: 0; }
 .excel-form-page .sheet-meta .ant-input, .excel-form-page .sheet-meta .ant-picker { width: 230px; border: 0; border-bottom: 1px solid #888; border-radius: 0; background: transparent; }
+.excel-form-page .sheet-meta .ant-input-disabled, .excel-form-page .sheet-meta .ant-picker-disabled input { color: #303030; -webkit-text-fill-color: #303030; }
 .excel-form-page .sheet-scroll { overflow: auto; }
 .excel-form-page .sheet-grid { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1.5px solid #555; color: #222; font-size: 14px; }
 .excel-form-page .sheet-grid th, .excel-form-page .sheet-grid td { padding: 8px; border: 1px solid #777; background: #fff; text-align: center; vertical-align: middle; overflow-wrap: anywhere; }
@@ -35,6 +36,9 @@
 .excel-form-page .sheet-grid .ant-select { width: 100%; text-align: left; }
 .excel-form-page .sheet-grid .ant-select-selection-item { white-space: normal; }
 .excel-form-page .sheet-grid .ant-checkbox-wrapper { color: #303030; }
+.excel-form-page .sheet-grid .ant-checkbox-wrapper-disabled > span { color: #303030; }
+.excel-form-page .sheet-grid .ant-checkbox-disabled .ant-checkbox-inner { border-color: #aaa; }
+.excel-form-page .sheet-grid .ant-checkbox-disabled.ant-checkbox-checked .ant-checkbox-inner::after { border-color: #555; }
 .excel-form-page .sheet-grid .roles-column .ant-checkbox-group { display: flex; flex-direction: column; gap: 8px; }
 .excel-form-page .sheet-grid .roles-column .ant-checkbox-wrapper { margin-inline-start: 0; }
 .excel-form-page .sheet-note { margin: 12px 0 0; color: #666; font-size: 12px; line-height: 1.7; }
